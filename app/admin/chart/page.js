@@ -1,0 +1,146 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { api } from '../api';
+
+export default function ChartEditor() {
+  const [year, setYear] = useState(2026);
+  const [week, setWeek] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  // thêm dòng
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState([]);
+
+  useEffect(() => {
+    api('/api/admin/stats').then((s) => {
+      if (s.settings?.currentYear) setYear(s.settings.currentYear);
+    }).catch(() => {});
+  }, []);
+
+  async function load() {
+    setBusy(true); setMsg(null);
+    try {
+      const d = await api(`/api/admin/chart/${year}/${week}`);
+      setRows(d.rows.map((r) => ({ ...r })));
+      setLoaded(true);
+      if (!d.rows.length) setMsg({ type: 'ok', text: 'Tuần này chưa có dữ liệu — thêm bài rồi Lưu.' });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  async function doSearch(v) {
+    setSearch(v);
+    if (v.trim().length < 2) { setResults([]); return; }
+    try {
+      const d = await api('/api/admin/tracks?limit=8&q=' + encodeURIComponent(v));
+      const have = new Set(rows.map((r) => r.trackId));
+      setResults(d.items.filter((t) => !have.has(t.id)));
+    } catch { setResults([]); }
+  }
+
+  function addRow(t) {
+    setRows([...rows, { trackId: t.id, name: t.name, artist: t.artist, rank: null, stream: 0 }]);
+    setSearch(''); setResults([]);
+  }
+  function updateRow(i, key, val) {
+    const next = [...rows]; next[i] = { ...next[i], [key]: val }; setRows(next);
+  }
+  function removeRow(i) { setRows(rows.filter((_, j) => j !== i)); }
+
+  function sortByRank() {
+    setRows([...rows].sort((a, b) => {
+      const ra = a.rank == null ? 9999 : Number(a.rank);
+      const rb = b.rank == null ? 9999 : Number(b.rank);
+      return ra - rb;
+    }));
+  }
+
+  async function save() {
+    setBusy(true); setMsg(null);
+    try {
+      const payload = rows.map((r) => ({
+        trackId: r.trackId,
+        rank: r.rank === '' || r.rank == null ? null : Number(r.rank),
+        stream: Number(r.stream) || 0,
+      }));
+      const r = await api(`/api/admin/chart/${year}/${week}`, { method: 'PUT', body: { rows: payload } });
+      setMsg({ type: 'ok', text: `Đã lưu ${r.count} dòng cho tuần ${week}/${year}.` });
+    } catch (e) { setMsg({ type: 'err', text: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <>
+      <div className="panel">
+        <h2>Chọn tuần</h2>
+        <div className="row">
+          <div style={{ flex: '0 0 120px' }}>
+            <label>Năm</label>
+            <input type="number" value={year} onChange={(e) => setYear(+e.target.value)} />
+          </div>
+          <div style={{ flex: '0 0 120px' }}>
+            <label>Tuần</label>
+            <input type="number" min="1" value={week} onChange={(e) => setWeek(+e.target.value)} />
+          </div>
+          <div style={{ alignSelf: 'flex-end' }}>
+            <button onClick={load} disabled={busy}>Nạp tuần</button>
+          </div>
+        </div>
+      </div>
+
+      {loaded && (
+        <div className="panel">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2 style={{ margin: 0 }}>Tuần {week}/{year} — {rows.length} bài</h2>
+            <div className="row">
+              <button className="ghost sm" onClick={sortByRank}>Sắp theo hạng</button>
+              <button onClick={save} disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu tuần'}</button>
+            </div>
+          </div>
+          {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+
+          <table>
+            <thead>
+              <tr><th style={{ width: 70 }}>Hạng</th><th>Bài</th><th>Nghệ sĩ</th><th style={{ width: 130 }}>Stream</th><th></th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.trackId}>
+                  <td><input type="number" value={r.rank ?? ''} placeholder="—"
+                    onChange={(e) => updateRow(i, 'rank', e.target.value)} /></td>
+                  <td>{r.name} <span className="muted" style={{ fontSize: 11 }}>{r.trackId}</span></td>
+                  <td className="muted">{r.artist}</td>
+                  <td><input type="number" value={r.stream}
+                    onChange={(e) => updateRow(i, 'stream', e.target.value)} /></td>
+                  <td><button className="danger sm" onClick={() => removeRow(i)}>Bỏ</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ marginTop: 16, position: 'relative', maxWidth: 420 }}>
+            <label>Thêm bài vào tuần</label>
+            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Gõ tên / nghệ sĩ / id…" />
+            {results.length > 0 && (
+              <div className="panel" style={{ position: 'absolute', zIndex: 5, width: '100%', marginTop: 4, padding: 6 }}>
+                {results.map((t) => (
+                  <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '4px 6px' }}>
+                    <span>{t.name} <span className="muted">— {t.artist}</span></span>
+                    <button className="sm" onClick={() => addRow(t)}>Thêm</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            Lưu ý: nút “Lưu tuần” sẽ <strong>thay thế toàn bộ</strong> dữ liệu của tuần này bằng danh sách trên. Hạng để trống = có stream nhưng không trên chart.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}

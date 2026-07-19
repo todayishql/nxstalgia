@@ -1,0 +1,250 @@
+/* ═══════════════════════════════════════════════════════════════
+   THE N[26]stalgia — "reputation"
+   Art direction: bìa album reputation (Taylor Swift, 2017).
+   Newsprint gritty · blackletter Old English cho masthead.
+   Accent màu iconic: đỏ (--red) cho [26]/NEW/No.1, xanh/đỏ (--up/--down)
+   cho chỉ dấu lên xuống hạng.
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --paper:#EFEFEF; --paper2:#E2E2E2; --paper3:#FAFAFA;
+  --ink:#0A0A0A; --ink2:#333333; --muted:#5A5A5A; --faint:#8F8F8F;
+  --red:#C8102E; --red-dk:#9E0C24;
+  --rule:rgba(10,10,10,.30); --rule-soft:rgba(10,10,10,.14);
+  --gold:#0A0A0A; --silver:#5A5A5A; --bronze:#8F8F8F;
+  --up:#0B8A3E; --down:#D02040; --new:#C8102E; --re:#333333;
+  --radius:0;
+  --display:"Pirata One", "UnifrakturMaguntia", "Old English Text MT", Georgia, serif;
+  --body:"Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  /* alias cho code cũ tham chiếu */
+  --bg:var(--paper); --panel:var(--paper); --panel2:var(--paper2);
+  --line:var(--rule-soft); --text:var(--ink); --accent:var(--red); --accent2:var(--ink);
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html{scrollbar-color:var(--ink2) var(--paper)}
+body{background:var(--paper); color:var(--ink); font-family:var(--body); font-size:15px; line-height:1.55}
+/* grain newsprint — đậm hơn, chất reputation */
+body::after{content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.08;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+a{color:var(--ink); text-decoration-color:var(--red); text-underline-offset:3px}
+button{font-family:var(--body)}
+::selection{background:var(--ink); color:var(--paper)}
+.wrap{max-width:1180px; margin:0 auto; padding:0 20px 80px; position:relative}
+
+/* ── Masthead kiểu nhật báo ─────────────────────────────── */
+header{padding:14px 0 0; margin-bottom:0}
+.ear{display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;
+  border-top:1px solid var(--ink); border-bottom:1px solid var(--rule); padding:7px 0}
+.sub{color:var(--ink2); font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:600}
+.head-right{display:flex; gap:8px; align-items:center}
+h1{font-family:var(--display); font-weight:400; font-size:clamp(50px,8.5vw,96px); letter-spacing:.01em;
+  text-align:center; line-height:1.02; padding:22px 0 6px; text-transform:lowercase}
+h1 em{color:var(--red); font-style:normal}
+/* typing effect trong [..] — khung 2ch cố định để masthead không giật */
+.yrslot{display:inline-block; min-width:2ch; text-align:left; white-space:nowrap}
+.type-caret{display:inline-block; width:.42ch; height:.66em; background:var(--red);
+  margin-left:.04em; vertical-align:-.02em; animation:caretblink 1.05s steps(1) infinite}
+@keyframes caretblink{0%,55%{opacity:1} 56%,100%{opacity:0}}
+.dateline{text-align:center; font-family:var(--mono); font-size:11px; letter-spacing:.28em; text-transform:uppercase;
+  color:var(--ink2); padding-bottom:14px; border-bottom:4px double var(--ink); margin-bottom:0}
+.week-pill{font-family:var(--mono); font-weight:700; font-size:12px; color:var(--red);
+  border:1px solid var(--red); padding:6px 12px; letter-spacing:.06em; background:transparent}
+select.year{font-family:var(--mono); font-weight:700}
+.admin-link{font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink);
+  text-decoration:none; border:1px solid var(--ink); padding:7px 12px; white-space:nowrap; background:transparent}
+.admin-link:hover{background:var(--ink); color:var(--paper)}
+
+/* ── Nav: thanh chuyên mục ──────────────────────────────── */
+nav{display:flex; justify-content:center; gap:0; border-bottom:1px solid var(--ink); margin-bottom:30px; overflow-x:auto}
+nav button{background:none; border:none; border-left:1px solid var(--rule-soft); color:var(--ink2);
+  font-size:11.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; padding:12px 18px;
+  cursor:pointer; white-space:nowrap; transition:background .12s,color .12s}
+nav button:first-child{border-left:none}
+nav button:hover{color:var(--ink)}
+nav button.active{background:var(--ink); color:var(--paper)}
+nav button:focus-visible{outline:2px solid var(--red); outline-offset:-2px}
+.view{display:none}
+.view.active{display:block; animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0} to{opacity:1}}
+@media (prefers-reduced-motion: reduce){ *{animation:none!important; transition:none!important} }
+
+/* ── KPI: dòng thống kê chia cột bằng hairline ─────────── */
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:0; margin-bottom:26px;
+  border-top:1px solid var(--ink); border-bottom:1px solid var(--rule)}
+.kpi{background:none; border:none; border-left:1px solid var(--rule-soft); padding:16px 18px 14px}
+.kpi:first-child{border-left:none}
+.kpi .lbl{font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; font-weight:700}
+.kpi .val{font-family:var(--mono); font-weight:700; font-size:27px; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+.kpi .note{font-size:11.5px; color:var(--faint); margin-top:3px}
+
+/* ── Podium: bài đinh trang nhất + 2 tin phụ ───────────── */
+.podium{display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:0; align-items:stretch; margin-bottom:30px;
+  border-bottom:1px solid var(--rule)}
+.pod{background:none; border:none; border-left:1px solid var(--rule-soft); padding:18px 20px; position:relative; overflow:hidden}
+.pod:first-child{border-left:none}
+.pod .place{font-family:var(--mono); font-weight:700; font-size:11px; letter-spacing:.24em; margin-bottom:10px; color:var(--muted)}
+.pod .tname{font-family:var(--display); font-weight:400; font-size:24px; line-height:1.08; margin-bottom:4px}
+.pod .taname{color:var(--ink2); font-size:13px}
+.pod .meta{display:flex; gap:14px; margin-top:12px; font-family:var(--mono); font-size:11.5px; color:var(--muted); flex-wrap:wrap}
+.pod .meta b{color:var(--ink)}
+.pod.p1{border-top:6px solid var(--ink); background:none; padding:20px 22px}
+.pod.p1 .place{color:var(--red)}
+.pod.p1 .tname{font-size:clamp(30px,3.6vw,44px)}
+.pod.p2 .place,.pod.p3 .place{color:var(--muted)}
+.pod.p2,.pod.p3{border-top:1px solid var(--ink); align-self:end}
+.crown{position:absolute; top:18px; right:20px; font-size:10px; font-family:var(--mono); font-weight:700;
+  letter-spacing:.12em; color:var(--red); border:1px solid var(--red); padding:3px 9px; background:transparent; text-transform:uppercase}
+.eq{display:inline-flex; gap:3px; align-items:flex-end; height:15px; margin-left:10px; vertical-align:-2px}
+.eq i{width:3px; background:var(--red); animation:eqa 1s ease-in-out infinite}
+.eq i:nth-child(1){height:60%} .eq i:nth-child(2){height:100%; animation-delay:.15s}
+.eq i:nth-child(3){height:40%; animation-delay:.3s} .eq i:nth-child(4){height:80%; animation-delay:.45s}
+@keyframes eqa{0%,100%{transform:scaleY(.5)} 50%{transform:scaleY(1)}}
+
+/* ── Panel: mục báo với tiêu đề gạch đôi ───────────────── */
+.panel{background:none; border:none; border-top:3px double var(--ink); border-radius:0; padding:14px 0 8px; margin-bottom:26px}
+.panel h2{font-family:var(--body); font-weight:800; font-size:13px; letter-spacing:.18em; text-transform:uppercase; margin-bottom:14px}
+.panel h2::after{content:""; display:inline-block; width:36px; height:3px; background:var(--red); margin-left:12px; vertical-align:middle}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:28px}
+@media(max-width:860px){ .grid2{grid-template-columns:1fr} .podium{grid-template-columns:1fr} .pod{border-left:none; border-top:1px solid var(--rule)} }
+
+/* ── Bảng: dòng chart như bản in ───────────────────────── */
+table{width:100%; border-collapse:collapse; font-size:14px}
+th{font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); text-align:left;
+  padding:8px 10px; border-bottom:1px solid var(--ink); font-weight:700}
+td{padding:10px; border-bottom:1px solid var(--rule-soft); vertical-align:middle}
+tr:hover td{background:rgba(28,23,16,.04)}
+td.rank{font-family:var(--display); font-weight:400; font-size:26px; width:52px; text-align:center; line-height:1;
+  font-variant-numeric:tabular-nums}
+td.rank.r1{color:var(--red)}
+td.rank.r2,td.rank.r3{color:var(--ink)}
+.t-name{font-weight:600; letter-spacing:.005em}
+.t-artist{color:var(--ink2); font-size:12.5px}
+.t-artist .alink{cursor:pointer; text-decoration:underline dotted; text-decoration-color:var(--red); text-underline-offset:3px}
+.thumb{width:38px; height:38px; border-radius:0; border:1px solid var(--rule); background:var(--paper2); color:var(--faint);
+  display:inline-grid; place-items:center; font-size:15px; overflow:hidden; background-size:cover; background-position:center; flex:none;
+  filter:grayscale(1) contrast(1.08)}
+.thumb.med{width:52px; height:52px; font-size:18px}
+.thumb.big{width:76px; height:76px; font-size:26px}
+td.thumbcell{width:48px; padding-right:2px}
+td.num{font-family:var(--mono); font-size:13px; color:var(--ink2); text-align:right; font-variant-numeric:tabular-nums}
+/* movement: ký hiệu in, không nền pill */
+.mv{font-family:var(--mono); font-weight:700; font-size:12px; padding:1px 0; display:inline-block; min-width:36px; text-align:center; letter-spacing:.02em}
+.mv.up{color:var(--up)}
+.mv.down{color:var(--down)}
+.mv.eq{color:var(--faint)}
+.mv.new{color:var(--paper); background:var(--red); padding:2px 7px; letter-spacing:.1em}
+.mv.re{color:var(--ink); border:1px solid var(--ink); padding:1px 6px; letter-spacing:.1em}
+.clickable{cursor:pointer}
+
+/* ── Controls / form ───────────────────────────────────── */
+.controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px}
+select,input[type=number],input[type=text],textarea{
+  background:var(--paper3); border:1px solid var(--rule); color:var(--ink); border-radius:0;
+  padding:9px 12px; font-size:14px; font-family:var(--body)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--red); outline-offset:0; border-color:transparent}
+.btn{background:var(--ink); color:var(--paper); font-weight:700; border:1px solid var(--ink); border-radius:0;
+  padding:10px 18px; cursor:pointer; font-size:11.5px; letter-spacing:.14em; text-transform:uppercase}
+.btn:hover{background:var(--red); border-color:var(--red)}
+.btn.ghost{background:transparent; color:var(--ink)}
+.btn.ghost:hover{background:var(--ink); color:var(--paper)}
+.btn.small{padding:6px 12px; font-size:10.5px}
+.btn.danger{background:transparent; color:var(--red); border-color:var(--red)}
+.btn.danger:hover{background:var(--red); color:var(--paper)}
+.iconbtn{background:transparent; border:1px solid var(--ink); color:var(--ink); border-radius:0; width:38px; height:38px; cursor:pointer; font-size:15px}
+.iconbtn:hover{background:var(--ink); color:var(--paper)}
+.chartbox{position:relative; height:320px}
+.chartbox.tall{height:380px}
+.hint{font-size:12px; color:var(--faint); margin-top:8px; font-style:italic}
+.badge-user{font-size:9px; font-family:var(--mono); font-weight:700; letter-spacing:.1em; color:var(--red);
+  border:1px solid var(--red); padding:1px 5px; margin-left:6px; vertical-align:1px; text-transform:uppercase}
+.records{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:0;
+  border-top:1px solid var(--rule); border-bottom:1px solid var(--rule)}
+.record{background:none; border:none; border-left:1px solid var(--rule-soft); border-radius:0; padding:14px 16px}
+.record:first-child{border-left:none}
+.record .rl{font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; font-weight:700}
+.record .rv{font-weight:600; font-size:15px}
+.record .rd{font-family:var(--mono); color:var(--red); font-size:13px; margin-top:2px}
+.entry-row{display:grid; grid-template-columns:1fr 90px 110px 38px; gap:8px; margin-bottom:8px}
+@media(max-width:640px){ .entry-row{grid-template-columns:1fr 70px 90px 34px} }
+.toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); border:none;
+  color:var(--paper); padding:12px 22px; border-radius:0; font-weight:600; font-size:13.5px; z-index:99; display:none; max-width:90vw}
+.searchbar{width:100%; max-width:420px}
+.empty{color:var(--faint); text-align:center; padding:36px 0; font-size:14px; font-style:italic}
+.loading{color:var(--muted); text-align:center; padding:60px 0; font-family:var(--mono); letter-spacing:.14em; text-transform:uppercase; font-size:12px}
+.week-nav{display:flex; align-items:center; gap:8px}
+.week-label{font-family:var(--mono); font-weight:700; font-size:16px; min-width:110px; text-align:center; letter-spacing:.04em}
+.pill-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+.pill{font-family:var(--mono); font-size:11.5px; border:1px solid var(--rule); background:transparent; color:var(--ink2);
+  border-radius:0; padding:5px 12px; cursor:pointer}
+.pill.on{color:var(--paper); border-color:var(--ink); background:var(--ink)}
+details.help{margin-top:14px; color:var(--ink2); font-size:13px}
+details.help summary{cursor:pointer; color:var(--red); font-weight:600}
+
+/* ── Chart Beat: cột bình luận ─────────────────────────── */
+.beat{border-left:3px solid var(--red); padding-left:16px}
+.beat .bt{font-family:var(--mono); font-size:10.5px; color:var(--red); letter-spacing:.22em; margin-bottom:10px; font-weight:700; text-transform:uppercase}
+.beat p{margin-bottom:7px; font-size:14.5px}
+.beat p::first-letter{font-family:var(--display); font-size:1.25em}
+
+/* ── Sheet xuất ảnh: bản in chính hiệu ─────────────────── */
+.sheet{background:var(--paper3); border-radius:0; overflow:hidden; border:1px solid var(--ink); box-shadow:6px 6px 0 rgba(28,23,16,.14)}
+.sheet-head{display:grid; grid-template-columns:1fr auto auto auto; border-bottom:2px solid var(--ink)}
+.sheet-title{font-family:var(--display); font-weight:400; font-size:clamp(20px,3.6vw,32px); letter-spacing:.01em; padding:12px 20px; color:var(--ink); display:flex; align-items:center; min-width:0; text-transform:lowercase}
+.sheet-title em{color:var(--red); font-style:normal}
+.sheet-box{background:var(--ink); color:var(--paper3); font-weight:700; padding:12px 16px; display:flex; align-items:center; font-size:14px; white-space:nowrap}
+.sheet-box.numbox{background:var(--red); font-family:var(--mono); font-size:20px; justify-content:center; min-width:64px; color:#fff}
+@media(max-width:720px){ .sheet-head{grid-template-columns:1fr auto} .sheet-box.dates{display:none} }
+.sheet table{color:var(--ink)}
+.sheet th{color:var(--ink2); border-bottom:2px solid var(--ink); background:var(--paper3); font-weight:700}
+.sheet td{border-bottom:1px solid var(--rule-soft); color:var(--ink); padding:0 10px; height:58px}
+.sheet tbody tr:nth-child(10n) td{border-bottom:2px solid var(--ink)} /* nhóm 10 hạng — nhịp bản in Billboard */
+.sheet tr:hover td{background:rgba(28,23,16,.03)}
+/* TW: hạng tuần này — số serif lớn, No.1 đỏ, bullet ● khi stream tăng */
+.sheet .rk-tw{font-family:var(--display); font-weight:400; font-size:30px; text-align:center; width:72px;
+  line-height:1; white-space:nowrap; font-variant-numeric:tabular-nums}
+.sheet .rk-tw.no1{color:var(--red)}
+.sheet .blt{color:var(--red); font-size:11px; vertical-align:.42em; margin-left:3px}
+/* LW: hạng tuần trước */
+.sheet .rk-lw{font-family:var(--mono); font-size:13px; color:var(--muted); text-align:center; width:56px; font-variant-numeric:tabular-nums}
+/* +/-: cột chỉ dấu lên/xuống hạng, tách riêng sau LW để số TW không bị lệch */
+.sheet .rk-mv{font-family:var(--mono); font-weight:700; font-size:11.5px; letter-spacing:.04em; text-align:center; width:52px; white-space:nowrap}
+.sheet .rk-mv.up{color:var(--up)}
+.sheet .rk-mv.down{color:var(--down)}
+.sheet .rk-mv.eq,.sheet .rk-mv.none{color:var(--faint)}
+.lw-new{display:inline-block; background:var(--red); color:#fff; font-family:var(--mono); font-weight:700;
+  font-size:9.5px; letter-spacing:.14em; padding:2px 6px}
+.lw-re{display:inline-block; border:1px solid var(--ink); color:var(--ink); font-family:var(--mono); font-weight:700;
+  font-size:9.5px; letter-spacing:.14em; padding:1px 5px}
+.sheet .songcell{display:flex; align-items:center; gap:12px; padding:6px 0}
+.sheet .songmeta{min-width:0}
+.sheet .s-name{font-weight:700; color:var(--ink); line-height:1.25; text-transform:uppercase; font-size:13.5px; letter-spacing:.01em}
+.sheet .s-artist{color:var(--ink2); font-size:12.5px}
+.sheet .pts{font-family:var(--mono); font-weight:700; text-align:right; padding-right:16px; width:110px; font-variant-numeric:tabular-nums}
+.sheet .pct{text-align:right; padding-right:16px; font-weight:700; width:74px; font-size:12.5px; font-family:var(--mono); color:var(--faint)}
+.sheet .pct.pos{color:var(--up)}
+.sheet .pct.neg{color:var(--down)}
+.sheet .peakc{font-weight:700; text-align:center; width:64px; font-size:13px; font-family:var(--mono)}
+.sheet .peakc.no1{color:var(--red)}
+.sheet .wocc{text-align:center; width:56px; font-weight:700; font-family:var(--mono); color:var(--ink2)}
+.sheet .badge-user{color:var(--red); border-color:var(--red)}
+/* Callout: con dấu đặc sản Billboard */
+.callout{display:inline-block; margin-left:8px; font-family:var(--mono); font-weight:700; font-size:9px;
+  letter-spacing:.16em; text-transform:uppercase; padding:2px 7px; vertical-align:1px}
+.callout.hotshot{background:var(--red); color:#fff}
+.callout.gainer{border:1px solid var(--red); color:var(--red)}
+
+/* ── Prediction / compare ──────────────────────────────── */
+.pred-flag{font-size:10px; font-family:var(--mono); font-weight:700; letter-spacing:.1em; padding:2px 8px; margin-left:8px; text-transform:uppercase}
+.pred-flag.hot{color:var(--paper); background:var(--red)}
+.pred-flag.risk{color:var(--red); border:1px solid var(--red)}
+.vs{font-family:var(--display); font-weight:400; font-size:22px; color:var(--faint); font-style:italic}
+.cmp-grid{display:grid; grid-template-columns:1fr auto 1fr; gap:6px 14px; font-size:14px; margin:14px 0}
+.cmp-grid .c-lbl{color:var(--muted); font-size:10px; letter-spacing:.16em; text-transform:uppercase; text-align:center; font-weight:700}
+.cmp-grid .c-a{text-align:right; font-family:var(--mono); font-weight:700; font-variant-numeric:tabular-nums}
+.cmp-grid .c-b{text-align:left; font-family:var(--mono); font-weight:700; font-variant-numeric:tabular-nums}
+.cmp-grid .win{color:var(--red)}
+.est-years{display:flex; flex-wrap:wrap; gap:8px; margin:12px 0}
+.est-year{display:flex; flex-direction:column; gap:4px; align-items:stretch}
+.est-year .ey{font-family:var(--mono); font-size:12px; color:var(--muted); text-align:center}
+.est-year .ey-base{font-size:11px; color:var(--red); text-align:center; padding:8px 6px; border:1px dashed var(--red); white-space:nowrap}
+.est-year select{padding:7px 8px; font-size:12.5px}

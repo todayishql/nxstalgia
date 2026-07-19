@@ -1,0 +1,35 @@
+# Chạy trên OrbStack: `docker compose up -d --build`
+# App Next.js + MongoDB đóng gói sẵn, không cần Atlas.
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017" # bỏ dòng này nếu không cần truy cập Mongo từ máy host
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Mặc định dùng mongo container. Nếu .env có MONGODB_URI (vd Atlas) thì ưu tiên dùng nó.
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/nxstalgia}
+      JWT_SECRET: ${JWT_SECRET:-doi-thanh-chuoi-ngau-nhien-that-dai}
+      JWT_TTL: "604800"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@nxstalgia.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme123}
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
