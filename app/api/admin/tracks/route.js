@@ -31,10 +31,10 @@ export const POST = handle(async (req) => {
   await dbConnect();
   const body = await req.json();
   const { id, aid, name, artist, baseline, artworkUrl } = body;
-  if (!id || !name || !artist) return json({ error: 'Cần id, name, artist' }, 400);
+  if (!id || !name || !artist) return json({ error: 'id, name and artist are required' }, 400);
 
   const exists = await Track.findById(id);
-  if (exists) return json({ error: 'id đã tồn tại' }, 409);
+  if (exists) return json({ error: 'id already exists' }, 409);
 
   const doc = await Track.create({
     _id: String(id),

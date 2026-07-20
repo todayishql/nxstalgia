@@ -12,7 +12,7 @@ export const POST = handle(async (req, ctx) => {
   await dbConnect();
   const { id } = await ctx.params;
   const track = await Track.findById(id);
-  if (!track) return json({ error: 'Không tìm thấy track' }, 404);
+  if (!track) return json({ error: 'Track not found' }, 404);
 
   const { url, status } = await fetchArtwork({ name: track.name, artist: track.artist });
   track.artworkUrl = url;

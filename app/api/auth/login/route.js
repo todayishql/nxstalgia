@@ -7,12 +7,12 @@ export const runtime = 'nodejs';
 
 export const POST = handle(async (req) => {
   const { email, password } = await req.json();
-  if (!email || !password) return json({ error: 'Thiếu email/mật khẩu' }, 400);
+  if (!email || !password) return json({ error: 'Email and password are required' }, 400);
 
   await dbConnect();
   const user = await User.findOne({ email: String(email).toLowerCase().trim() });
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return json({ error: 'Email hoặc mật khẩu không đúng' }, 401);
+    return json({ error: 'Invalid email or password' }, 401);
   }
 
   const token = signToken({ sub: String(user._id), email: user.email, role: user.role });

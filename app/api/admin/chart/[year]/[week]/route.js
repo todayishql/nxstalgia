@@ -23,7 +23,7 @@ export const GET = handle(async (req, ctx) => {
     week: w,
     rows: entries.map((e) => ({
       trackId: e.trackId,
-      name: meta[e.trackId]?.name || '(track đã xoá)',
+      name: meta[e.trackId]?.name || '(track deleted)',
       artist: meta[e.trackId]?.artist || '',
       rank: e.rank,
       stream: e.stream,
@@ -39,13 +39,13 @@ export const PUT = handle(async (req, ctx) => {
   const { year, week } = await ctx.params;
   const y = parseInt(year, 10), w = parseInt(week, 10);
   const { rows } = await req.json();
-  if (!Array.isArray(rows)) return json({ error: 'Cần mảng rows' }, 400);
+  if (!Array.isArray(rows)) return json({ error: 'rows array is required' }, 400);
 
   // Kiểm tra track tồn tại
   const ids = [...new Set(rows.map((r) => String(r.trackId)))];
   const known = new Set((await Track.find({ _id: { $in: ids } }, { _id: 1 }).lean()).map((t) => t._id));
   const unknown = ids.filter((id) => !known.has(id));
-  if (unknown.length) return json({ error: 'trackId không tồn tại: ' + unknown.join(', ') }, 400);
+  if (unknown.length) return json({ error: 'trackId does not exist: ' + unknown.join(', ') }, 400);
 
   const ops = rows.map((r) => ({
     updateOne: {

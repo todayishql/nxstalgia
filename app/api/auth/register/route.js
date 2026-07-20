@@ -13,12 +13,12 @@ export const POST = handle(async (req) => {
   if (count > 0) await requireAuth();
 
   const { email, password, name } = await req.json();
-  if (!email || !password) return json({ error: 'Thiếu email/mật khẩu' }, 400);
+  if (!email || !password) return json({ error: 'Email and password are required' }, 400);
   if (String(password).length < 6)
-    return json({ error: 'Mật khẩu tối thiểu 6 ký tự' }, 400);
+    return json({ error: 'Password must be at least 6 characters' }, 400);
 
   const exists = await User.findOne({ email: String(email).toLowerCase().trim() });
-  if (exists) return json({ error: 'Email đã tồn tại' }, 409);
+  if (exists) return json({ error: 'Email already exists' }, 409);
 
   const user = await User.create({
     email: String(email).toLowerCase().trim(),

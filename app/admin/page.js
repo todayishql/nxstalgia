@@ -20,7 +20,7 @@ export default function Dashboard() {
       const r = await api('/api/admin/artwork', { method: 'POST', body: { limit: 25, retryNone } });
       setMsg({
         type: 'ok',
-        text: `Đã xử lý ${r.processed}: ok ${r.ok}, không có ${r.none}, lỗi ${r.failed}. Còn pending: ${r.remaining}.`,
+        text: `Processed ${r.processed}: ok ${r.ok}, none ${r.none}, errors ${r.failed}. Still pending: ${r.remaining}.`,
       });
       await load();
     } catch (e) {
@@ -30,38 +30,38 @@ export default function Dashboard() {
     }
   }
 
-  if (!stats) return <div className="muted">{msg ? msg.text : 'Đang tải…'}</div>;
+  if (!stats) return <div className="muted">{msg ? msg.text : 'Loading…'}</div>;
 
   return (
     <>
       <div className="panel">
-        <h2>Tổng quan</h2>
+        <h2>Overview</h2>
         <div className="grid-cards">
-          <div className="card"><div className="num">{stats.tracks}</div><div className="lbl">Bài hát</div></div>
-          <div className="card"><div className="num">{stats.entries}</div><div className="lbl">Bản ghi tuần (entries)</div></div>
-          <div className="card"><div className="num">{stats.years.join(', ') || '—'}</div><div className="lbl">Năm có dữ liệu</div></div>
-          <div className="card"><div className="num">{stats.artwork.ok}</div><div className="lbl">Có ảnh bìa</div></div>
+          <div className="card"><div className="num">{stats.tracks}</div><div className="lbl">Songs</div></div>
+          <div className="card"><div className="num">{stats.entries}</div><div className="lbl">Weekly entries</div></div>
+          <div className="card"><div className="num">{stats.years.join(', ') || '—'}</div><div className="lbl">Years with data</div></div>
+          <div className="card"><div className="num">{stats.artwork.ok}</div><div className="lbl">Has cover art</div></div>
         </div>
       </div>
 
       <div className="panel">
-        <h2>Ảnh bìa (iTunes)</h2>
+        <h2>Cover art (iTunes)</h2>
         {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
         <div className="row">
           <span className="pill ok">ok {stats.artwork.ok}</span>
           <span className="pill pending">pending {stats.artwork.pending}</span>
-          <span className="pill none">không có {stats.artwork.none}</span>
+          <span className="pill none">none {stats.artwork.none}</span>
         </div>
         <div className="row" style={{ marginTop: 14 }}>
           <button onClick={() => refreshArtwork(false)} disabled={busy || stats.artwork.pending === 0}>
-            {busy ? 'Đang tra…' : `Tra ảnh cho ${stats.artwork.pending} bài pending (25/lần)`}
+            {busy ? 'Fetching…' : `Fetch artwork for ${stats.artwork.pending} pending songs (25/run)`}
           </button>
           <button className="ghost" onClick={() => refreshArtwork(true)} disabled={busy}>
-            Thử lại cả những bài “không có”
+            Retry the “none” songs too
           </button>
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Ảnh được tra phía server bằng nghệ sĩ chính (artists[0]) nên xử lý được cả bài collab có dấu phẩy.
+          Artwork is fetched server-side using the primary artist (artists[0]), so collab songs with commas are handled too.
         </p>
       </div>
     </>

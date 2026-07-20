@@ -37,7 +37,7 @@ export const PUT = handle(async (req, ctx) => {
   }
 
   const doc = await Track.findByIdAndUpdate(id, update, { new: true, runValidators: true });
-  if (!doc) return json({ error: 'Không tìm thấy track' }, 404);
+  if (!doc) return json({ error: 'Track not found' }, 404);
   return json({ track: { id: doc._id, ...doc.toObject(), _id: undefined } });
 });
 
@@ -47,7 +47,7 @@ export const DELETE = handle(async (req, ctx) => {
   await dbConnect();
   const { id } = await ctx.params;
   const doc = await Track.findByIdAndDelete(id);
-  if (!doc) return json({ error: 'Không tìm thấy track' }, 404);
+  if (!doc) return json({ error: 'Track not found' }, 404);
   const { deletedCount } = await Entry.deleteMany({ trackId: id });
   return json({ ok: true, deletedEntries: deletedCount });
 });

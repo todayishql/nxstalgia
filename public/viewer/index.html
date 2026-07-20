@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>THE N[26]stalgia — Bảng xếp hạng cá nhân</title>
+<title>THE N[26]stalgia — Personal Chart</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=UnifrakturMaguntia&family=Libre+Franklin:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/viewer/styles.css">
@@ -14,11 +14,11 @@
 <div class="wrap">
   <header>
     <div class="ear">
-      <span class="sub">Bảng xếp hạng âm nhạc cá nhân · tính theo stream</span>
+      <span class="sub">Personal music chart · by streams</span>
       <div class="head-right">
-        <select class="year" id="yearSelect" aria-label="Chọn năm"></select>
+        <select class="year" id="yearSelect" aria-label="Select year"></select>
         <div class="week-pill" id="headerWeek">—</div>
-        <a href="/admin" class="admin-link" title="Trang quản trị dữ liệu">Admin</a>
+        <a href="/admin" class="admin-link" title="Data administration">Admin</a>
       </div>
     </div>
     <h1 id="brandTitle">THE N<em>[26]</em>stalgia</h1>
@@ -26,15 +26,14 @@
   </header>
 
   <nav id="tabs">
-    <button data-view="overview" class="active">Tổng quan</button>
-    <button data-view="chart">Bảng xếp hạng</button>
-    <button data-view="analytics">Phân tích</button>
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="chart">Chart</button>
+    <button data-view="analytics">Analytics</button>
     <button data-view="alltime">All-time</button>
-    <button data-view="tracks">Bài hát</button>
-    <button data-view="log">Nhập dữ liệu</button>
+    <button data-view="tracks">Songs</button>
   </nav>
 
-  <div id="loading" class="loading">Đang tải dữ liệu…</div>
+  <div id="loading" class="loading">Loading data…</div>
 
   <!-- ══ TỔNG QUAN ══ -->
   <section class="view" id="view-overview">
@@ -42,19 +41,19 @@
     <div class="podium" id="podium"></div>
     <div class="grid2">
       <div class="panel">
-        <h2>Top 10 tuần này</h2>
+        <h2>Top 10 this week</h2>
         <table><tbody id="top10"></tbody></table>
       </div>
       <div class="panel">
-        <h2>Stream của bài No.1 theo tuần</h2>
+        <h2>No.1 song streams by week</h2>
         <div class="chartbox"><canvas id="chartNo1"></canvas></div>
-        <div class="hint">Di chuột để xem bài giữ No.1 từng tuần.</div>
+        <div class="hint">Hover to see which song held No.1 each week.</div>
       </div>
     </div>
     <div class="panel beat">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
         <h2 style="margin:0">📰 Chart Beat</h2>
-        <button class="btn ghost small" id="copyBeatBtn">Copy bản tin</button>
+        <button class="btn ghost small" id="copyBeatBtn">Copy bulletin</button>
       </div>
       <div id="beatBody"></div>
     </div>
@@ -64,12 +63,12 @@
   <section class="view" id="view-chart">
     <div class="controls">
       <div class="week-nav">
-        <button class="iconbtn" id="wPrev" aria-label="Tuần trước">‹</button>
-        <div class="week-label" id="wLabel">Tuần —</div>
-        <button class="iconbtn" id="wNext" aria-label="Tuần sau">›</button>
+        <button class="iconbtn" id="wPrev" aria-label="Last week">‹</button>
+        <div class="week-label" id="wLabel">Week —</div>
+        <button class="iconbtn" id="wNext" aria-label="Next week">›</button>
       </div>
-      <select id="wSelect" aria-label="Chọn tuần"></select>
-      <button class="btn ghost small" id="pngBtn">⬇ Tải PNG</button>
+      <select id="wSelect" aria-label="Select week"></select>
+      <button class="btn ghost small" id="pngBtn">⬇ Download PNG</button>
     </div>
     <div class="sheet" id="sheetEl">
       <div class="sheet-head">
@@ -79,61 +78,61 @@
         <div class="sheet-box dates" id="sheetDates">—</div>
       </div>
       <table>
-        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th>Bài hát</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
+        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th>Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
         <tbody id="chartTable"></tbody>
       </table>
     </div>
-    <div class="hint">TW/LW = hạng tuần này / tuần trước · ● = stream tăng so với tuần trước · ±% = thay đổi stream. Bấm vào bài để xem quỹ đạo.</div>
+    <div class="hint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
   </section>
 
   <!-- ══ PHÂN TÍCH ══ -->
   <section class="view" id="view-analytics">
     <div class="panel">
-      <h2>Kỷ lục của năm <span id="recYear" style="color:var(--gold)"></span></h2>
+      <h2>Records of the Year <span id="recYear" style="color:var(--gold)"></span></h2>
       <div class="records" id="records"></div>
     </div>
     <div class="panel">
-      <h2>Cuộc đua No.1</h2>
+      <h2>The #1 Race</h2>
       <div class="chartbox tall"><canvas id="chartBump"></canvas></div>
-      <div class="hint">Quỹ đạo thứ hạng của các bài từng đạt #1 trong năm (xếp theo thời điểm lên đỉnh). Bấm vào chú thích để ẩn/hiện từng bài.</div>
+      <div class="hint">Rank trajectories of songs that reached #1 during the year (ordered by when they peaked). Click a legend entry to hide/show a song.</div>
     </div>
     <div class="grid2">
       <div class="panel">
-        <h2>Top nghệ sĩ theo tổng stream</h2>
+        <h2>Top artists by total streams</h2>
         <div class="chartbox tall"><canvas id="chartArtists"></canvas></div>
-        <div class="hint">Bấm vào cột để mở trang nghệ sĩ.</div>
+        <div class="hint">Click a bar to open the artist page.</div>
       </div>
       <div class="panel">
-        <h2>Trụ hạng lâu nhất (WOC)</h2>
+        <h2>Longest-charting (WOC)</h2>
         <div class="chartbox tall"><canvas id="chartWoc"></canvas></div>
       </div>
     </div>
     <div class="grid2">
       <div class="panel">
-        <h2>Phân bố peak của các bài</h2>
+        <h2>Peak distribution</h2>
         <div class="chartbox"><canvas id="chartPeaks"></canvas></div>
       </div>
       <div class="panel">
-        <h2>Bền bỉ vs. Bùng nổ</h2>
+        <h2>Consistency vs. Explosiveness</h2>
         <div class="chartbox"><canvas id="chartScatter"></canvas></div>
-        <div class="hint">Trục ngang: số tuần trên chart · Trục dọc: stream trung bình/tuần.</div>
+        <div class="hint">X-axis: weeks on chart · Y-axis: average streams per week.</div>
       </div>
     </div>
     <div class="grid2">
       <div class="panel">
-        <h2>🔮 Dự đoán tuần tới</h2>
+        <h2>🔮 Next-week prediction</h2>
         <div id="predBody"></div>
-        <div class="hint">Ngoại suy từ đà tăng/giảm stream 3 tuần gần nhất — chỉ mang tính tham khảo.</div>
+        <div class="hint">Extrapolated from the stream momentum of the last 3 weeks — for reference only.</div>
       </div>
       <div class="panel">
-        <h2>⚔️ So sánh 1-vs-1</h2>
+        <h2>⚔️ Head-to-head</h2>
         <div class="controls" style="margin-bottom:10px">
-          <input type="text" list="trackOptions" id="cmpA" placeholder="Bài A" style="flex:1;min-width:150px">
+          <input type="text" list="trackOptions" id="cmpA" placeholder="Song A" style="flex:1;min-width:150px">
           <span class="vs">VS</span>
-          <input type="text" list="trackOptions" id="cmpB" placeholder="Bài B" style="flex:1;min-width:150px">
-          <button class="btn small" id="cmpBtn">So sánh</button>
+          <input type="text" list="trackOptions" id="cmpB" placeholder="Song B" style="flex:1;min-width:150px">
+          <button class="btn small" id="cmpBtn">Compare</button>
         </div>
-        <div id="cmpOut"><div class="empty" style="padding:20px 0">Chọn hai bài để đối đầu.</div></div>
+        <div id="cmpOut"><div class="empty" style="padding:20px 0">Pick two songs to face off.</div></div>
       </div>
     </div>
   </section>
@@ -143,110 +142,36 @@
     <div class="kpis" id="atKpis"></div>
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <h2 style="margin:0">🏛️ Bảng vàng All-time</h2>
-        <input type="text" id="atSearch" placeholder="Tìm bài / nghệ sĩ…" style="max-width:260px">
+        <h2 style="margin:0">🏛️ All-time Hall of Fame</h2>
+        <input type="text" id="atSearch" placeholder="Search songs / artists…" style="max-width:260px">
       </div>
       <table>
-        <thead><tr><th style="text-align:center">#</th><th></th><th>Bài hát</th><th style="text-align:right">Trước chart</th><th style="text-align:right">Trong chart</th><th style="text-align:right">All-time</th><th style="text-align:right">Peak</th><th></th></tr></thead>
+        <thead><tr><th style="text-align:center">#</th><th></th><th>Song</th><th style="text-align:right">Pre-chart</th><th style="text-align:right">On-chart</th><th style="text-align:right">All-time</th><th style="text-align:right">Peak</th></tr></thead>
         <tbody id="atTable"></tbody>
       </table>
-      <div class="hint">"Trước chart" = tổng stream tích lũy trước khi chart tồn tại (trước 2026). Số này cộng vào all-time nhưng không ảnh hưởng bảng xếp hạng tuần. Bấm ✎ để nhập/sửa từng bài.</div>
+      <div class="hint">"Pre-chart" = total streams accumulated before the chart existed (before 2026). This counts toward all-time but does not affect the weekly chart.</div>
     </div>
     <div class="panel">
-      <h2>🎚️ Ước lượng stream trước chart</h2>
-      <p class="hint" style="margin:0 0 12px">Cho các bài ra mắt trước khi có chart: chọn bài, gán <b>mức độ nghe từng năm</b>, hệ thống tính tổng stream tích lũy đến hiện tại. MAX ×1.5 · HIGH ×1.25 · MEDIUM ×1.2 · NORMAL ×1.1 · LOW ×1.05 · MUTE ×1 (đứng yên).</p>
-      <div class="controls">
-        <input type="text" list="trackOptions" id="estTrack" placeholder="Bài hát (khớp danh mục)" style="flex:1;min-width:180px">
-        <label style="color:var(--muted);font-size:13px">Ra mắt</label>
-        <input type="number" id="estStart" min="1990" max="2100" placeholder="2015" style="width:90px">
-        <label style="color:var(--muted);font-size:13px">Đến hết</label>
-        <input type="number" id="estEnd" min="1990" max="2100" value="2025" style="width:90px">
-        <label style="color:var(--muted);font-size:13px">Base</label>
-        <input type="number" id="estBase" min="1" value="500" style="width:80px">
-        <button class="btn small" id="estBuild">Tạo bảng năm</button>
-      </div>
-      <div class="est-years" id="estYears"></div>
-      <div id="estResult"></div>
-      <div class="controls" style="margin-top:12px"><button class="btn" id="estApply">Áp vào baseline của bài</button></div>
-    </div>
-
-    <div class="grid2">
-      <div class="panel">
-        <h2>Top nghệ sĩ all-time</h2>
-        <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
-      </div>
-      <div class="panel">
-        <h2>Nhập nhanh số liệu trước chart</h2>
-        <p class="hint" style="margin:0 0 8px">Mỗi dòng: <code>tên bài | tổng stream trước 2026</code>. Tên bài được khớp tự động với danh mục.</p>
-        <textarea id="baselineBox" rows="7" style="width:100%" placeholder="thank u, next | 25000&#10;7 Rings | 18000&#10;All I Want For Christmas Is You | 40000"></textarea>
-        <div class="controls" style="margin-top:8px"><button class="btn small" id="baselineBtn">Lưu số liệu</button></div>
-        <div id="baselineLog" class="hint"></div>
-      </div>
+      <h2>Top artists all-time</h2>
+      <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
     </div>
   </section>
 
   <!-- ══ BÀI HÁT ══ -->
   <section class="view" id="view-tracks">
     <div class="controls">
-      <input type="text" id="trackSearch" class="searchbar" placeholder="Tìm bài hát hoặc nghệ sĩ…">
+      <input type="text" id="trackSearch" class="searchbar" placeholder="Search songs or artists…">
     </div>
     <div id="trackDetail"></div>
     <div class="panel">
       <table>
-        <thead><tr><th></th><th>Bài hát</th><th style="text-align:right">Peak</th><th style="text-align:right">WOC</th><th style="text-align:right">Stream (năm)</th><th style="text-align:right">Stream (all-time)</th></tr></thead>
+        <thead><tr><th></th><th>Song</th><th style="text-align:right">Peak</th><th style="text-align:right">WOC</th><th style="text-align:right">Streams (year)</th><th style="text-align:right">Streams (all-time)</th></tr></thead>
         <tbody id="trackList"></tbody>
       </table>
     </div>
   </section>
 
-  <!-- ══ NHẬP DỮ LIỆU ══ -->
-  <section class="view" id="view-log">
-    <div class="grid2">
-      <div class="panel">
-        <h2>Ghi dữ liệu tuần</h2>
-        <div class="controls">
-          <label for="logYear" style="color:var(--muted);font-size:13px">Năm</label>
-          <input type="number" id="logYear" min="2000" max="2100" style="width:100px">
-          <label for="logWeek" style="color:var(--muted);font-size:13px">Tuần</label>
-          <input type="number" id="logWeek" min="1" max="53" style="width:80px">
-          <button class="btn ghost small" id="loadWeekBtn">Nạp dữ liệu tuần này</button>
-        </div>
-        <div class="hint" style="margin-bottom:12px">Nhập năm bất kỳ — kể cả các năm trước khi có chart (2024, 2025…). Năm mới sẽ tự xuất hiện trong bộ chọn năm ở đầu trang.</div>
-        <div id="entryRows"></div>
-        <div class="controls" style="margin-top:10px">
-          <button class="btn ghost small" id="addRowBtn">+ Thêm dòng</button>
-          <button class="btn" id="saveWeekBtn">Lưu tuần</button>
-        </div>
-        <details class="help">
-          <summary>Nhập nhanh bằng cách dán văn bản</summary>
-          <p style="margin:8px 0">Mỗi dòng theo dạng <code>hạng | tên bài | stream</code> (stream có thể bỏ trống). Tên bài sẽ được khớp tự động với danh mục.</p>
-          <textarea id="pasteBox" rows="5" style="width:100%" placeholder="1 | The Fate of Ophelia | 620&#10;2 | my way | 540"></textarea>
-          <div style="margin-top:8px"><button class="btn ghost small" id="pasteBtn">Phân tích & điền vào bảng</button></div>
-        </details>
-      </div>
-      <div>
-        <div class="panel">
-          <h2>Thêm bài mới vào danh mục</h2>
-          <div class="controls">
-            <input type="text" id="newTrackName" placeholder="Tên bài hát" style="flex:1;min-width:160px">
-            <input type="text" id="newTrackArtist" placeholder="Nghệ sĩ" style="flex:1;min-width:140px">
-            <button class="btn ghost small" id="addTrackBtn">Thêm</button>
-          </div>
-          <div class="hint">Danh mục bài hát dùng chung cho mọi năm.</div>
-        </div>
-        <div class="panel">
-          <h2>Dữ liệu của bạn</h2>
-          <div id="userWeeks" style="margin-bottom:12px"></div>
-          <div class="controls">
-            <button class="btn ghost small" id="exportBtn">Xuất JSON</button>
-            <button class="btn danger small" id="resetBtn">Xoá toàn bộ dữ liệu đã nhập</button>
-          </div>
-          <div class="hint">Dữ liệu bạn nhập được lưu tự động giữa các phiên. Dữ liệu gốc 2026 (tuần 1–46) luôn được bảo toàn.</div>
-        </div>
-      </div>
-    </div>
-    <datalist id="trackOptions"></datalist>
-  </section>
+  <datalist id="trackOptions"></datalist>
 </div>
 
 <div class="toast" id="toast"></div>

@@ -28,7 +28,7 @@ export default function LoginPage() {
     } catch (err) {
       // Chưa có user nào -> gợi ý đăng ký admin đầu tiên.
       if (mode === 'login' && err.status === 401) {
-        setMsg({ type: 'err', text: err.message + ' (nếu chưa có tài khoản, chuyển sang Đăng ký).' });
+        setMsg({ type: 'err', text: err.message + ' (if you don’t have an account yet, switch to Register).' });
       } else {
         setMsg({ type: 'err', text: err.message });
       }
@@ -40,24 +40,24 @@ export default function LoginPage() {
   return (
     <div className="auth-wrap">
       <div className="panel">
-        <h2>{mode === 'register' ? 'Đăng ký admin' : 'Đăng nhập'}</h2>
+        <h2>{mode === 'register' ? 'Register admin' : 'Log in'}</h2>
         {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
         <form onSubmit={submit}>
           <label>Email</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-          <label>Mật khẩu</label>
+          <label>Password</label>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           <div className="row" style={{ marginTop: 16 }}>
             <button type="submit" disabled={busy}>
-              {busy ? '...' : mode === 'register' ? 'Tạo tài khoản' : 'Đăng nhập'}
+              {busy ? '...' : mode === 'register' ? 'Create account' : 'Log in'}
             </button>
             <button type="button" className="ghost" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setMsg(null); }}>
-              {mode === 'login' ? 'Đăng ký admin đầu tiên' : 'Quay lại đăng nhập'}
+              {mode === 'login' ? 'Register first admin' : 'Back to log in'}
             </button>
           </div>
         </form>
         <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
-          Lần đầu chưa có tài khoản: dùng “Đăng ký admin đầu tiên”, hoặc chạy <code>npm run create-admin</code>.
+          No account yet on first run: use “Register first admin”, or run <code>npm run create-admin</code>.
         </p>
       </div>
     </div>
