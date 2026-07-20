@@ -6,9 +6,9 @@ import Link from 'next/link';
 import { api } from './api';
 
 const NAV = [
-  { href: '/admin', label: 'Tổng quan' },
-  { href: '/admin/tracks', label: 'Bài hát' },
-  { href: '/admin/chart', label: 'Bảng xếp hạng' },
+  { href: '/admin', label: 'Overview' },
+  { href: '/admin/tracks', label: 'Songs' },
+  { href: '/admin/chart', label: 'Chart' },
 ];
 
 export default function AdminLayout({ children }) {
@@ -28,7 +28,7 @@ export default function AdminLayout({ children }) {
   }, [isLogin, pathname, router]);
 
   if (isLogin) return children;
-  if (user === undefined) return <div className="container muted">Đang tải…</div>;
+  if (user === undefined) return <div className="container muted">Loading…</div>;
 
   async function logout() {
     await api('/api/auth/logout', { method: 'POST' });
@@ -46,7 +46,7 @@ export default function AdminLayout({ children }) {
         ))}
         <span className="spacer" />
         <span className="muted" style={{ fontSize: 12 }}>{user.email}</span>
-        <button className="ghost sm" onClick={logout}>Đăng xuất</button>
+        <button className="ghost sm" onClick={logout}>Sign out</button>
       </nav>
       <div className="container">{children}</div>
     </>

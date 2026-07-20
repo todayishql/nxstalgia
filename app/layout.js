@@ -2,12 +2,12 @@ import './globals.css';
 
 export const metadata = {
   title: 'THE N[26]stalgia — Admin',
-  description: 'Quản trị dữ liệu bảng xếp hạng',
+  description: 'Chart data administration',
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="vi">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

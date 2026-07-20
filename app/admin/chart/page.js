@@ -27,7 +27,7 @@ export default function ChartEditor() {
       const d = await api(`/api/admin/chart/${year}/${week}`);
       setRows(d.rows.map((r) => ({ ...r })));
       setLoaded(true);
-      if (!d.rows.length) setMsg({ type: 'ok', text: 'Tuần này chưa có dữ liệu — thêm bài rồi Lưu.' });
+      if (!d.rows.length) setMsg({ type: 'ok', text: 'No data for this week yet — add songs then Save.' });
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
     finally { setBusy(false); }
   }
@@ -68,7 +68,7 @@ export default function ChartEditor() {
         stream: Number(r.stream) || 0,
       }));
       const r = await api(`/api/admin/chart/${year}/${week}`, { method: 'PUT', body: { rows: payload } });
-      setMsg({ type: 'ok', text: `Đã lưu ${r.count} dòng cho tuần ${week}/${year}.` });
+      setMsg({ type: 'ok', text: `Saved ${r.count} rows for week ${week}/${year}.` });
     } catch (e) { setMsg({ type: 'err', text: e.message }); }
     finally { setBusy(false); }
   }
@@ -76,18 +76,18 @@ export default function ChartEditor() {
   return (
     <>
       <div className="panel">
-        <h2>Chọn tuần</h2>
+        <h2>Select week</h2>
         <div className="row">
           <div style={{ flex: '0 0 120px' }}>
-            <label>Năm</label>
+            <label>Year</label>
             <input type="number" value={year} onChange={(e) => setYear(+e.target.value)} />
           </div>
           <div style={{ flex: '0 0 120px' }}>
-            <label>Tuần</label>
+            <label>Week</label>
             <input type="number" min="1" value={week} onChange={(e) => setWeek(+e.target.value)} />
           </div>
           <div style={{ alignSelf: 'flex-end' }}>
-            <button onClick={load} disabled={busy}>Nạp tuần</button>
+            <button onClick={load} disabled={busy}>Load week</button>
           </div>
         </div>
       </div>
@@ -95,17 +95,17 @@ export default function ChartEditor() {
       {loaded && (
         <div className="panel">
           <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h2 style={{ margin: 0 }}>Tuần {week}/{year} — {rows.length} bài</h2>
+            <h2 style={{ margin: 0 }}>Week {week}/{year} — {rows.length} songs</h2>
             <div className="row">
-              <button className="ghost sm" onClick={sortByRank}>Sắp theo hạng</button>
-              <button onClick={save} disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu tuần'}</button>
+              <button className="ghost sm" onClick={sortByRank}>Sort by rank</button>
+              <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save week'}</button>
             </div>
           </div>
           {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
 
           <table>
             <thead>
-              <tr><th style={{ width: 70 }}>Hạng</th><th>Bài</th><th>Nghệ sĩ</th><th style={{ width: 130 }}>Stream</th><th></th></tr>
+              <tr><th style={{ width: 70 }}>Rank</th><th>Song</th><th>Artist</th><th style={{ width: 130 }}>Streams</th><th></th></tr>
             </thead>
             <tbody>
               {rows.map((r, i) => (
@@ -116,28 +116,28 @@ export default function ChartEditor() {
                   <td className="muted">{r.artist}</td>
                   <td><input type="number" value={r.stream}
                     onChange={(e) => updateRow(i, 'stream', e.target.value)} /></td>
-                  <td><button className="danger sm" onClick={() => removeRow(i)}>Bỏ</button></td>
+                  <td><button className="danger sm" onClick={() => removeRow(i)}>Remove</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
 
           <div style={{ marginTop: 16, position: 'relative', maxWidth: 420 }}>
-            <label>Thêm bài vào tuần</label>
-            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Gõ tên / nghệ sĩ / id…" />
+            <label>Add song to week</label>
+            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Type name / artist / id…" />
             {results.length > 0 && (
               <div className="panel" style={{ position: 'absolute', zIndex: 5, width: '100%', marginTop: 4, padding: 6 }}>
                 {results.map((t) => (
                   <div key={t.id} className="row" style={{ justifyContent: 'space-between', padding: '4px 6px' }}>
                     <span>{t.name} <span className="muted">— {t.artist}</span></span>
-                    <button className="sm" onClick={() => addRow(t)}>Thêm</button>
+                    <button className="sm" onClick={() => addRow(t)}>Add</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            Lưu ý: nút “Lưu tuần” sẽ <strong>thay thế toàn bộ</strong> dữ liệu của tuần này bằng danh sách trên. Hạng để trống = có stream nhưng không trên chart.
+            Note: the “Save week” button will <strong>replace all</strong> data for this week with the list above. Empty rank = has streams but not on the chart.
           </p>
         </div>
       )}
