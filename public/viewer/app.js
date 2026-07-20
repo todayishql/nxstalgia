@@ -11,6 +11,9 @@ const $ = id => document.getElementById(id);
 const fmt = n => (n==null ? '—' : n.toLocaleString('en-US'));
 // Rút gọn số lớn: 4200000 -> "4.2M".
 const abbr = n => { n=Number(n)||0; if(n>=1e9) return +(n/1e9).toFixed(1)+'B'; if(n>=1e6) return +(n/1e6).toFixed(1)+'M'; if(n>=1e3) return +(n/1e3).toFixed(1)+'K'; return String(n); };
+// Tách nghệ sĩ collab (khớp lib/artists.js) — credit stream cho TỪNG nghệ sĩ, không gom theo chuỗi.
+const ART_SPLIT_RE=/\s*(?:,|&|\bx\b|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bvà\b|;|\/)\s*/i;
+const splitArtists = a => (a ? String(a).split(ART_SPLIT_RE).map(s=>s.trim()).filter(Boolean) : []);
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', 3200); }
 
@@ -30,7 +33,7 @@ async function loadData(){
 function buildModel(){
   const tracks = new Map();
   for(const t of DATA.tracks){
-    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
+    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
   }
   for(const e of DATA.entries){
     const t = tracks.get(e.trackId); if(!t) continue;
@@ -192,7 +195,7 @@ function renderOverview(){
   $('headerWeek').textContent = w? ('WEEK '+w+' / '+y) : ('YEAR '+y);
   const rows=w?weekChart(y,w):[];
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
-  const artists=new Set(charted.map(t=>t.artist));
+  const artists=new Set(charted.flatMap(t=>t.artists));
   const no1=rows[0];
   $('kpis').innerHTML = `
     <div class="kpi"><div class="lbl">Current week</div><div class="val">${w?('W'+w):'—'}</div><div class="note">${rows.length} songs on chart</div></div>
@@ -354,7 +357,7 @@ function renderAnalytics(){
   const byStreak=[...charted].sort((a,b)=>S(b).streak-S(a).streak)[0];
   const byBest=[...charted].sort((a,b)=>S(b).best-S(a).best)[0];
   const byWoc=[...charted].sort((a,b)=>S(b).woc-S(a).woc)[0];
-  const no1s={}; for(const t of charted) if(S(t).peak===1) no1s[t.artist]=(no1s[t.artist]||0)+1;
+  const no1s={}; for(const t of charted) if(S(t).peak===1) for(const a of t.artists) no1s[a]=(no1s[a]||0)+1;
   const topNo1=Object.entries(no1s).sort((a,b)=>b[1]-a[1])[0];
   let nDebut1=0;
   for(const t of charted){
@@ -371,7 +374,7 @@ function renderAnalytics(){
 
   renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
 
-  const byArtist={}; for(const t of charted) byArtist[t.artist]=(byArtist[t.artist]||0)+S(t).total;
+  const byArtist={}; for(const t of charted) for(const a of t.artists) byArtist[a]=(byArtist[a]||0)+S(t).total;
   const topA=Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,10);
   drawChart('chartArtists','bar',{
     labels: topA.map(x=>x[0]),
@@ -627,7 +630,7 @@ window.openTrack = function(id, yPick){
           ${thumbHTML(t,'big')}
           <div>
             <h2 style="font-size:22px;margin-bottom:2px">${esc(t.name)}</h2>
-            <div class="t-artist" style="font-size:14px"><span class="alink" onclick="openArtist('${escAttr(t.artist)}')">${esc(t.artist)}</span></div>
+            <div class="t-artist" style="font-size:14px">${t.artists.map(a=>`<span class="alink" onclick="openArtist('${escAttr(a)}')">${esc(a)}</span>`).join(', ')}</div>
             ${chips}
           </div>
         </div>
@@ -658,7 +661,7 @@ window.openTrack = function(id, yPick){
 window.openArtist = function(name){
   switchView('tracks');
   const y=currentYear;
-  const list=[...model.tracks.values()].filter(t=>t.artist===name && (t.allTotal>0||t.user));
+  const list=[...model.tracks.values()].filter(t=>t.artists.includes(name) && (t.allTotal>0||t.user));
   if(!list.length){ toast('No data yet for this artist'); return; }
   list.sort((a,b)=>statsFor(b,y).total-statsFor(a,y).total || b.allTotal-a.allTotal);
   const yTotal=list.reduce((s,t)=>s+statsFor(t,y).total,0);
@@ -703,10 +706,12 @@ window.openArtist = function(name){
 }
 
 /* ───────── All-time ───────── */
+let atPage=0, atQuery=''; // phân trang Hall of Fame (100/trang)
+window.atGoPage=function(d){ atPage+=d; renderAllTime(); };
 function renderAllTime(){
   const list=[...model.tracks.values()].filter(t=>t.allTotal>0);
   list.sort((a,b)=>b.allTotal-a.allTotal);
-  const artists={}; for(const t of list) artists[t.artist]=(artists[t.artist]||0)+t.allTotal;
+  const artists={}; for(const t of list) for(const a of t.artists) artists[a]=(artists[a]||0)+t.allTotal;
   const grand=list.reduce((s,t)=>s+t.allTotal,0);
   const grandBase=list.reduce((s,t)=>s+t.baseline,0);
   const n1=list[0];
@@ -717,19 +722,34 @@ function renderAllTime(){
     <div class="kpi"><div class="lbl">Artists</div><div class="val">${Object.keys(artists).length}</div><div class="note">years tracked: ${model.yearList.join(', ')}</div></div>`;
 
   const q=($('atSearch').value||'').trim().toLowerCase();
-  const shown=(q?list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)):list).slice(0,100);
-  $('atTable').innerHTML = shown.map((t,i)=>{
-    const pos=list.indexOf(t)+1;
+  if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
+  const filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
+  const size=100, total=filtered.length, pages=Math.max(1,Math.ceil(total/size));
+  if(atPage>=pages) atPage=pages-1; if(atPage<0) atPage=0;
+  const rankOf=new Map(list.map((t,i)=>[t.id,i+1])); // hạng all-time toàn cục (giữ đúng kể cả khi lọc/phân trang)
+  // hạng chỉ theo pre-chart (baseline) — competition rank (baseline bằng nhau -> cùng hạng).
+  const preRankOf=new Map(); { const byBase=[...list].sort((a,b)=>b.baseline-a.baseline); let r=0,prev=null,seen=0;
+    for(const t of byBase){ seen++; if(t.baseline!==prev){ r=seen; prev=t.baseline; } preRankOf.set(t.id,r); } }
+  const shown=filtered.slice(atPage*size, atPage*size+size);
+  $('atTable').innerHTML = shown.map((t)=>{
+    const pos=rankOf.get(t.id);
+    const delta=(preRankOf.get(t.id)||pos)-pos; // >0: on-chart đẩy hạng lên so với chỉ pre-chart
+    const mv = delta>0 ? `<span class="mv up">▲${delta}</span>` : delta<0 ? `<span class="mv down">▼${-delta}</span>` : '';
     return `<tr>
       <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
+      <td style="text-align:center">${mv}</td>
       <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
       <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}</div></td>
       <td class="num">${t.baseline?fmt(t.baseline):'—'}</td>
       <td class="num">${fmt(t.trackedTotal)}</td>
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
-      <td class="num">${t.allPeak?'#'+t.allPeak:'—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7"><div class="empty">No songs found.</div></td></tr>';
+  const pg=$('atPager');
+  if(pg) pg.innerHTML = total>size ? `
+    <button class="pg" onclick="atGoPage(-1)" ${atPage<=0?'disabled':''}>‹</button>
+    <span>${atPage*size+1}–${Math.min(total,atPage*size+size)} of ${total}</span>
+    <button class="pg" onclick="atGoPage(1)" ${atPage>=pages-1?'disabled':''}>›</button>` : '';
 
   const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
   drawChart('chartAtArtists','bar',{
