@@ -80,18 +80,21 @@ nav button:focus-visible{outline:2px solid var(--red); outline-offset:-2px}
 /* ── Podium: bài đinh trang nhất + 2 tin phụ ───────────── */
 .podium{display:grid; grid-template-columns:1fr 1.5fr 1fr; gap:0; align-items:stretch; margin-bottom:30px;
   border-bottom:1px solid var(--rule)}
-.pod{background:none; border:none; border-left:1px solid var(--rule-soft); padding:18px 20px; position:relative; overflow:hidden}
+.pod{background:none; border:none; border-left:1px solid var(--rule-soft); padding:18px 20px; position:relative; overflow:hidden;
+  display:flex; flex-direction:column; min-width:0}
 .pod:first-child{border-left:none}
 .pod .place{font-family:var(--mono); font-weight:700; font-size:11px; letter-spacing:.24em; margin-bottom:10px; color:var(--muted)}
+.pod .song{display:flex; gap:12px; align-items:center; min-width:0}
 .pod .tname{font-family:var(--display); font-weight:400; font-size:24px; line-height:1.08; margin-bottom:4px}
 .pod .taname{color:var(--ink2); font-size:13px}
-.pod .meta{display:flex; gap:14px; margin-top:12px; font-family:var(--mono); font-size:11.5px; color:var(--muted); flex-wrap:wrap}
+/* meta ghim xuống đáy thẻ -> 3 podium cùng cao thì dòng meta thẳng hàng */
+.pod .meta{display:flex; gap:14px; margin-top:auto; padding-top:14px; font-family:var(--mono); font-size:11.5px; color:var(--muted); flex-wrap:wrap; align-items:center}
 .pod .meta b{color:var(--ink)}
 .pod.p1{border-top:6px solid var(--ink); background:none; padding:20px 22px}
 .pod.p1 .place{color:var(--red)}
-.pod.p1 .tname{font-size:clamp(30px,3.6vw,44px)}
+.pod.p1 .tname{font-size:clamp(28px,3.2vw,40px)}
 .pod.p2 .place,.pod.p3 .place{color:var(--muted)}
-.pod.p2,.pod.p3{border-top:1px solid var(--ink); align-self:end}
+.pod.p2,.pod.p3{border-top:1px solid var(--ink)}
 .crown{position:absolute; top:18px; right:20px; font-size:10px; font-family:var(--mono); font-weight:700;
   letter-spacing:.12em; color:var(--red); border:1px solid var(--red); padding:3px 9px; background:transparent; text-transform:uppercase}
 .eq{display:inline-flex; gap:3px; align-items:flex-end; height:15px; margin-left:10px; vertical-align:-2px}
@@ -106,6 +109,41 @@ nav button:focus-visible{outline:2px solid var(--red); outline-offset:-2px}
 .panel h2::after{content:""; display:inline-block; width:36px; height:3px; background:var(--red); margin-left:12px; vertical-align:middle}
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:28px}
 @media(max-width:860px){ .grid2{grid-template-columns:1fr} .podium{grid-template-columns:1fr} .pod{border-left:none; border-top:1px solid var(--rule)} }
+
+/* ── The #1 Race — Champions ──────────────────────────── */
+.race-head{display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:14px}
+.race-controls{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted)}
+.race-controls select{font-family:var(--mono); font-size:12px; padding:5px 8px; border:1px solid var(--rule); background:var(--paper3); color:var(--ink); border-radius:0}
+.race-grid{display:grid; grid-template-columns:1fr 340px; gap:22px; align-items:start}
+.race-slider{display:flex; align-items:center; gap:10px; margin-top:12px; font-size:12px; color:var(--muted)}
+.race-slider input[type=range]{flex:1; accent-color:var(--red)}
+.race-slider .mono{font-family:var(--mono); min-width:78px; text-align:right; color:var(--ink2)}
+.race-stats h3{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; margin-bottom:10px; color:var(--ink2)}
+.champ-table{width:100%; border-collapse:collapse; font-size:13px}
+.champ-table th{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); text-align:right; padding:4px 6px; border-bottom:1px solid var(--ink)}
+.champ-table th:first-child{text-align:left}
+.champ-table td{padding:7px 6px; border-bottom:1px solid var(--rule-soft); vertical-align:middle}
+.champ-table td.num{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink)}
+.champ-table tr.on td{background:rgba(28,23,16,.045)}
+.champ-song{display:flex; align-items:center; gap:8px}
+.champ-song .cs-name{font-weight:700; font-size:12.5px; line-height:1.15}
+.champ-song .cs-art{color:var(--ink2); font-size:11px}
+.cs-dot{width:8px; height:8px; border-radius:50%; flex:none}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.chip{display:inline-flex; align-items:center; gap:7px; border:1px solid var(--rule); padding:5px 11px 5px 8px; cursor:pointer; font-size:12px; color:var(--ink2); background:var(--paper3); user-select:none}
+.chip .thumb{width:22px; height:22px}
+.chip:hover{border-color:var(--ink2)}
+.chip.on{border-color:var(--ink); color:var(--ink); font-weight:600}
+.chip .ck{font-family:var(--mono); font-size:12px; color:var(--faint)}
+.chip.on .ck{color:var(--red)}
+.chip-more{gap:0; font-family:var(--mono); font-size:11px; letter-spacing:.04em; color:var(--red); border-style:dashed}
+.race-pager{display:flex; align-items:center; gap:10px; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--muted)}
+.race-pager .pg{border:1px solid var(--rule); background:var(--paper3); color:var(--ink); cursor:pointer; padding:2px 9px; font-size:13px; line-height:1}
+.race-pager .pg:disabled{opacity:.35; cursor:default}
+.race-pager .sizes{margin-left:auto; display:flex; align-items:center; gap:5px}
+.race-pager .sizes button{border:1px solid var(--rule); background:var(--paper3); color:var(--ink2); cursor:pointer; padding:2px 8px; font-family:var(--mono); font-size:11px}
+.race-pager .sizes button.on{background:var(--ink); color:var(--paper3); border-color:var(--ink)}
+@media(max-width:860px){ .race-grid{grid-template-columns:1fr} }
 
 /* ── Bảng: dòng chart như bản in ───────────────────────── */
 table{width:100%; border-collapse:collapse; font-size:14px}
@@ -195,18 +233,22 @@ details.help summary{cursor:pointer; color:var(--red); font-weight:600}
 @media(max-width:720px){ .sheet-head{grid-template-columns:1fr auto} .sheet-box.dates{display:none} }
 .sheet table{color:var(--ink)}
 .sheet th{color:var(--ink2); border-bottom:2px solid var(--ink); background:var(--paper3); font-weight:700}
-.sheet td{border-bottom:1px solid var(--rule-soft); color:var(--ink); padding:0 10px; height:58px}
+.sheet td{border-bottom:1px solid var(--rule-soft); color:var(--ink); padding:0 10px; height:58px; vertical-align:middle}
 .sheet tbody tr:nth-child(10n) td{border-bottom:2px solid var(--ink)} /* nhóm 10 hạng — nhịp bản in Billboard */
 .sheet tr:hover td{background:rgba(28,23,16,.03)}
-/* TW: hạng tuần này — số serif lớn, No.1 đỏ, bullet ● khi stream tăng */
+/* TW: hạng tuần này — số serif lớn, No.1 đỏ, bullet ● khi stream tăng.
+   Con số bọc trong .rk-num để luôn căn giữa; bullet đặt absolute nên KHÔNG đẩy lệch số. */
 .sheet .rk-tw{font-family:var(--display); font-weight:400; font-size:30px; text-align:center; width:72px;
   line-height:1; white-space:nowrap; font-variant-numeric:tabular-nums}
+.sheet .rk-tw .rk-num{position:relative; display:inline-block; line-height:1}
 .sheet .rk-tw.no1{color:var(--red)}
-.sheet .blt{color:var(--red); font-size:11px; vertical-align:.42em; margin-left:3px}
+.sheet .blt{position:absolute; left:100%; top:.06em; margin-left:3px; color:var(--red); font-size:11px}
 /* LW: hạng tuần trước */
 .sheet .rk-lw{font-family:var(--mono); font-size:13px; color:var(--muted); text-align:center; width:56px; font-variant-numeric:tabular-nums}
-/* +/-: cột chỉ dấu lên/xuống hạng, tách riêng sau LW để số TW không bị lệch */
-.sheet .rk-mv{font-family:var(--mono); font-weight:700; font-size:11.5px; letter-spacing:.04em; text-align:center; width:52px; white-space:nowrap}
+/* +/-: cột chỉ dấu lên/xuống hạng — nội dung căn giữa tuyệt đối bằng flex */
+.sheet .rk-mv{width:52px; padding:0; text-align:center}
+.sheet .rk-mv .mv-in{display:inline-flex; align-items:center; justify-content:center; gap:2px; height:56px;
+  font-family:var(--mono); font-weight:700; font-size:12px; letter-spacing:.03em; line-height:1; font-variant-numeric:tabular-nums}
 .sheet .rk-mv.up{color:var(--up)}
 .sheet .rk-mv.down{color:var(--down)}
 .sheet .rk-mv.eq,.sheet .rk-mv.none{color:var(--faint)}

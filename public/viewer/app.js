@@ -9,6 +9,8 @@ let selectedWeek = null;
 
 const $ = id => document.getElementById(id);
 const fmt = n => (n==null ? '—' : n.toLocaleString('en-US'));
+// Rút gọn số lớn: 4200000 -> "4.2M".
+const abbr = n => { n=Number(n)||0; if(n>=1e9) return +(n/1e9).toFixed(1)+'B'; if(n>=1e6) return +(n/1e6).toFixed(1)+'M'; if(n>=1e3) return +(n/1e3).toFixed(1)+'K'; return String(n); };
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', 3200); }
 
@@ -97,8 +99,9 @@ function movement(t, y, w){
 function wocUpTo(t,y,w){ const wm=t.years.get(y); if(!wm) return 0; let c=0; for(const [pw,e] of wm) if(pw<=w&&e.rank!=null) c++; return c; }
 function peakUpTo(t,y,w){ const wm=t.years.get(y); if(!wm) return null; let p=null; for(const [pw,e] of wm) if(pw<=w&&e.rank!=null&&(p==null||e.rank<p)) p=e.rank; return p; }
 function weekDates(y,w){
-  // Neo: Tuần 46/2026 bắt đầu 10/07/2026; các năm chart dài 52 tuần
-  const start = new Date(Date.UTC(2026,6,10) + ((w-46) + (y-2026)*52)*7*86400000);
+  // Mùa Y dài 52 tuần, đặt tên theo năm KẾT THÚC: bắt đầu ~T9 năm (Y-1) -> kết thúc cuối T8 năm Y.
+  // Neo: Tuần 1/2026 = 29/08/2025 -> Tuần 52/2026 = 21–27/08/2026 (Tuần 1/2027 = 28/08/2026).
+  const start = new Date(Date.UTC(2025,7,29) + ((w-1) + (y-2026)*52)*7*86400000);
   const end = new Date(start.getTime()+6*86400000);
   const f = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
   return f(start)+' – '+f(end);
@@ -207,14 +210,14 @@ function renderOverview(){
     <div class="pod ${cls[i]} clickable" onclick="openTrack('${r.t.id}')">
       ${idx===0&&run>1?`<div class="crown">👑 ${run} weeks in a row</div>`:''}
       <div class="place">${label[i]} ${idx===0?'<span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>':''}</div>
-      <div style="display:flex; gap:12px; align-items:center">
+      <div class="song">
         ${thumbHTML(r.t, idx===0?'big':'med')}
         <div>
           <div class="tname">${esc(r.t.name)}</div>
           <div class="taname">${esc(r.t.artist)}</div>
         </div>
       </div>
-      <div class="meta"><span>Stream <b>${fmt(r.stream)}</b></span><span>Peak <b>#${peakUpTo(r.t,y,w)}</b></span><span>WOC <b>${wocUpTo(r.t,y,w)}</b></span>${mv?`<span class="mv ${mv.cls}">${mv.txt}</span>`:''}</div>
+      <div class="meta"><span>Stream <b>${fmt(r.stream)}</b></span><span>Peak <b>#${peakUpTo(r.t,y,w)}</b></span><span>WOC <b>${wocUpTo(r.t,y,w)}</b></span>${mv&&mv.cls!=='eq'?`<span class="mv ${mv.cls}">${mv.txt}</span>`:''}</div>
     </div>`;
   });
 
@@ -222,7 +225,7 @@ function renderOverview(){
     const mv=movement(r.t,y,w);
     return `<tr class="clickable" onclick="openTrack('${r.t.id}')">
       <td class="rank r${r.rank<=3?r.rank:''}">${r.rank}</td>
-      <td>${mv?`<span class="mv ${mv.cls}">${mv.txt}</span>`:''}</td>
+      <td>${mv&&mv.cls!=='eq'?`<span class="mv ${mv.cls}">${mv.txt}</span>`:''}</td>
       <td class="thumbcell">${thumbHTML(r.t)}</td>
       <td><div class="t-name">${esc(r.t.name)}</div><div class="t-artist">${esc(r.t.artist)}</div></td>
       <td class="num">${fmt(r.stream)}</td>
@@ -287,10 +290,12 @@ function renderChartView(){
                   : (r.t.id===gainerId && bestJump>=3) ? '<span class="callout gainer">Greatest Gainer</span>' : '';
     // chỉ dấu lên/xuống hạng: cột riêng sau LW — ▲3 / ▼2 / = (NEW/RE để trống)
     const hasMv = mv.cls==='up'||mv.cls==='down'||mv.cls==='eq';
+    // up/down: ▲n / ▼n; không đổi hạng (eq) hoặc không có mv -> để trống cho gọn
+    const mvInner = (mv.cls==='up'||mv.cls==='down') ? mv.txt : '';
     return `<tr class="clickable" onclick="openTrack('${r.t.id}')">
-      <td class="rk-tw${r.rank===1?' no1':''}">${r.rank}${bullet?'<span class="blt">●</span>':''}</td>
+      <td class="rk-tw${r.rank===1?' no1':''}"><span class="rk-num">${r.rank}${bullet?'<span class="blt">●</span>':''}</span></td>
       <td class="rk-lw">${lw}</td>
-      <td class="rk-mv ${hasMv?mv.cls:'none'}">${hasMv?mv.txt:'—'}</td>
+      <td class="rk-mv ${hasMv?mv.cls:'none'}"><span class="mv-in">${mvInner}</span></td>
       <td><div class="songcell">${thumbHTML(r.t)}<div class="songmeta"><div class="s-name">${esc(r.t.name)}${r.user?'<span class="badge-user">YOUR ENTRY</span>':''}${callout}</div><div class="s-artist">${esc(r.t.artist)}</div></div></div></td>
       <td class="pts">${fmt(r.stream)}</td>
       <td class="pct${pctCls}">${pctTxt}</td>
@@ -317,6 +322,21 @@ async function exportPNG(){
 const RACE_COLORS=['#0A0A0A','#4A4A4A','#767676','#9E9E9E','#2E2E2E','#5F5F5F','#8A8A8A','#BDBDBD'];
 /* nét đứt xen kẽ để phân biệt các đường cùng tông xám (style trắng đen) */
 const RACE_DASHES=[[],[6,3],[2,3],[10,4],[],[6,3],[2,3],[10,4]];
+/* Champions: line được chọn tô màu để phân biệt; state giữ qua các lần render */
+const CHAMP_COLORS=['#C8A02A','#B23A48','#264F8E','#6B3FA0','#2E8B57','#C0632B','#0A0A0A','#8A6D3B'];
+let raceState={ year:null, sort:'weeks', selected:new Set(), upTo:null, champs:[], colorOf:{}, statSize:5, statPage:0, carExpanded:false };
+/* Vẽ tên bài ở điểm cuối của các line champion đang chọn */
+const raceLabelPlugin={ id:'raceLabels', afterDatasetsDraw(chart){
+  const ctx=chart.ctx; ctx.save(); ctx.font='700 11px "Libre Franklin", system-ui, sans-serif'; ctx.textBaseline='middle';
+  chart.data.datasets.forEach((ds,i)=>{
+    if(!ds._champ) return;
+    const meta=chart.getDatasetMeta(i); let pt=null;
+    for(let k=meta.data.length-1;k>=0;k--){ if(ds.data[k]!=null){ pt=meta.data[k]; break; } }
+    if(!pt) return;
+    ctx.fillStyle=ds.borderColor; ctx.fillText(ds.label, pt.x+7, pt.y);
+  });
+  ctx.restore();
+} };
 function renderAnalytics(){
   const y=currentYear;
   $('recYear').textContent=y;
@@ -324,6 +344,8 @@ function renderAnalytics(){
   if(!charted.length){
     $('records').innerHTML='<div class="empty">No data yet for this year.</div>';
     ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
+    if($('champStats')) $('champStats').innerHTML='<div class="empty">No #1 songs yet.</div>';
+    if($('champCarousel')) $('champCarousel').innerHTML='';
     $('predBody').innerHTML='<div class="empty" style="padding:16px 0">No data yet.</div>';
     return;
   }
@@ -347,24 +369,7 @@ function renderAnalytics(){
     <div class="record"><div class="rl">Most No.1 songs</div><div class="rv">${topNo1?esc(topNo1[0]):'—'}</div><div class="rd">${topNo1?topNo1[1]+' songs reached #1':''}</div></div>
     <div class="record"><div class="rl">Debut straight at No.1</div><div class="rv">${nDebut1} songs</div><div class="rd">debuted at #1</div></div>`;
 
-  // Bump chart — cuộc đua No.1: mọi bài có peak #1 trong năm, vẽ trọn quỹ đạo
-  const mw=maxWeekOf(y);
-  const firstNo1=t=>{ const wm=t.years.get(y); if(wm) for(let w=1;w<=mw;w++){ const e=wm.get(w); if(e&&e.rank===1) return w; } return Infinity; };
-  let racers=charted.filter(t=>S(t).peak===1).sort((a,b)=>firstNo1(a)-firstNo1(b));
-  if(!racers.length) racers=[...charted].sort((a,b)=>S(b).total-S(a).total).slice(0,8); // năm chưa có bài #1 nào
-  const rankMax=Math.max(10, ...racers.flatMap(t=>{ const wm=t.years.get(y)||new Map(); return [...wm.values()].filter(e=>e.rank!=null).map(e=>e.rank); }));
-  const labels=[]; for(let w=1;w<=mw;w++) labels.push('W'+w);
-  drawChart('chartBump','line',{
-    labels,
-    datasets: racers.map((t,i)=>({
-      label:t.name,
-      data: labels.map((_,ix)=>{ const e=entryAt(t,y,ix+1); return (e&&e.rank!=null)?e.rank:null; }),
-      borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length], borderDash:RACE_DASHES[i%RACE_DASHES.length],
-      tension:.3, pointRadius:2, pointHoverRadius:5, spanGaps:false
-    }))
-  },{ plugins:{ legend:{ position:'bottom', labels:{ color:'#4A4A4A', boxWidth:10, font:{size:11} } },
-       tooltip:{ callbacks:{ label:c=>c.dataset.label+': #'+c.parsed.y } } },
-     scales:{ y:{ reverse:true, min:1, max:rankMax, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } }, x:{ ticks:{ maxTicksLimit:14 } } } });
+  renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
 
   const byArtist={}; for(const t of charted) byArtist[t.artist]=(byArtist[t.artist]||0)+S(t).total;
   const topA=Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,10);
@@ -401,6 +406,121 @@ function renderAnalytics(){
 
   renderPrediction(y);
 }
+
+/* ───────── The #1 Race — Champions ───────── */
+function computeChampions(y){
+  const champs=[];
+  for(const t of model.tracks.values()){
+    const wm=t.years.get(y); if(!wm) continue;
+    let weeksAt1=0, first1=Infinity, best=0, bestWeek=null;
+    for(const [w,e] of wm){
+      if(e.rank===1){ weeksAt1++; if(w<first1) first1=w; }
+      if((e.stream||0)>best){ best=e.stream||0; bestWeek=w; }
+    }
+    if(weeksAt1>0) champs.push({ id:t.id, t, weeksAt1, first1, peakStream:best, peakWeek:bestWeek });
+  }
+  return champs;
+}
+function sortChamps(champs, mode){
+  const a=[...champs];
+  if(mode==='peakStream') a.sort((x,z)=>z.peakStream-x.peakStream);
+  else if(mode==='peakWeek') a.sort((x,z)=>(x.peakWeek||999)-(z.peakWeek||999));
+  else if(mode==='first') a.sort((x,z)=>x.first1-z.first1);
+  else a.sort((x,z)=>z.weeksAt1-x.weeksAt1 || z.peakStream-x.peakStream);
+  return a;
+}
+function renderRace(y){
+  const champs=computeChampions(y);
+  if(raceState.year!==y){ // đổi năm -> khởi tạo lại lựa chọn + slider + phân trang
+    raceState.year=y;
+    raceState.selected=new Set(sortChamps(champs,raceState.sort).slice(0,4).map(c=>c.id));
+    raceState.upTo=maxWeekOf(y)||1;
+    raceState.statPage=0; raceState.carExpanded=false;
+  }
+  raceState.champs=champs;
+  const sl=$('raceWeek'); const mw=maxWeekOf(y)||1;
+  if(sl){ sl.min=1; sl.max=mw; if(raceState.upTo>mw) raceState.upTo=mw; sl.value=raceState.upTo; }
+  const sll=$('raceWeekLabel'); if(sll) sll.textContent='W1–W'+raceState.upTo;
+  const ss=$('raceSort'); if(ss) ss.value=raceState.sort;
+  renderRaceMeta(y);
+  renderRaceChart(y);
+}
+// Phần bên phải (bảng + carousel) — tách riêng để phân trang/expand không phải vẽ lại chart.
+function renderRaceMeta(y){
+  const CAR_MIN=5;
+  const sorted=sortChamps(raceState.champs||[], raceState.sort);
+  // màu cho bài đang chọn (theo thứ tự sort) -> dùng chung bảng + chart
+  const colorOf={}; let ci=0;
+  for(const c of sorted){ if(raceState.selected.has(c.id)){ colorOf[c.id]=CHAMP_COLORS[ci%CHAMP_COLORS.length]; ci++; } }
+  raceState.colorOf=colorOf;
+
+  // ── Bảng so sánh: phân trang 5/10 ──
+  const size=raceState.statSize||5, total=sorted.length, pages=Math.max(1,Math.ceil(total/size));
+  if(raceState.statPage>=pages) raceState.statPage=pages-1;
+  if(raceState.statPage<0) raceState.statPage=0;
+  const p=raceState.statPage;
+  const pageItems=sorted.slice(p*size, p*size+size);
+  const statsEl=$('champStats');
+  if(statsEl){
+    statsEl.innerHTML = total ? `<table class="champ-table">
+      <thead><tr><th>Song &amp; Artist</th><th>Wks #1</th><th>Peak streams</th><th>Peak wk</th></tr></thead>
+      <tbody>${pageItems.map(c=>{ const on=raceState.selected.has(c.id); return `<tr class="${on?'on':''} clickable" onclick="raceToggle('${c.id}')">
+        <td><div class="champ-song"><span class="cs-dot" style="background:${on?colorOf[c.id]:'transparent'}"></span>${thumbHTML(c.t)}<div><div class="cs-name">${esc(c.t.name)}</div><div class="cs-art">${esc(c.t.artist)}</div></div></div></td>
+        <td class="num">${c.weeksAt1}</td>
+        <td class="num">${abbr(c.peakStream)}</td>
+        <td class="num">W${c.peakWeek||'—'}</td>
+      </tr>`; }).join('')}</tbody></table>
+      <div class="race-pager">
+        <button class="pg" onclick="raceStatPage(-1)" ${p<=0?'disabled':''}>‹</button>
+        <span>${p*size+1}–${Math.min(total,p*size+size)} of ${total}</span>
+        <button class="pg" onclick="raceStatPage(1)" ${p>=pages-1?'disabled':''}>›</button>
+        <span class="sizes">Per page
+          <button class="${size===5?'on':''}" onclick="raceStatSize(5)">5</button>
+          <button class="${size===10?'on':''}" onclick="raceStatSize(10)">10</button>
+        </span>
+      </div>` : '<div class="empty">No #1 songs yet.</div>';
+  }
+  // ── Carousel: expand (mặc định 5 bài) ──
+  const carEl=$('champCarousel');
+  if(carEl){
+    const shown = raceState.carExpanded ? sorted : sorted.slice(0, CAR_MIN);
+    let html = shown.map(c=>{ const on=raceState.selected.has(c.id); return `<span class="chip ${on?'on':''}" onclick="raceToggle('${c.id}')">
+      <span class="ck">${on?'✓':'○'}</span>${thumbHTML(c.t)}<span>${esc(c.t.name)}</span></span>`; }).join('');
+    if(total>CAR_MIN) html += `<button class="chip chip-more" onclick="raceCarToggle()">${raceState.carExpanded?'▲ Show less':'▾ +'+(total-CAR_MIN)+' more'}</button>`;
+    carEl.innerHTML = html || '<span class="hint">No champions.</span>';
+  }
+  hydrateThumbs();
+}
+function renderRaceChart(y){
+  const champs=raceState.champs||[];
+  const sorted=sortChamps(champs, raceState.sort);
+  const upTo=raceState.upTo||maxWeekOf(y)||1;
+  const labels=[]; for(let w=1;w<=upTo;w++) labels.push('W'+w);
+  const series=c=>labels.map((_,ix)=>{ const e=entryAt(c.t,y,ix+1); return (e&&e.rank!=null)?e.rank:null; });
+  const ds=[];
+  // line nền (không chọn) — xám mờ làm ngữ cảnh
+  sorted.filter(c=>!raceState.selected.has(c.id)).forEach(c=>ds.push({
+    label:c.t.name, data:series(c), borderColor:'rgba(28,23,16,.13)', backgroundColor:'transparent',
+    borderWidth:1, pointRadius:0, tension:.3, spanGaps:false }));
+  // line champion đang chọn — tô màu, dày, có nhãn
+  sorted.filter(c=>raceState.selected.has(c.id)).forEach(c=>ds.push({
+    label:c.t.name, _champ:true, data:series(c),
+    borderColor:raceState.colorOf[c.id]||'#0A0A0A', backgroundColor:raceState.colorOf[c.id]||'#0A0A0A',
+    borderWidth:2.5, pointRadius:2, pointHoverRadius:5, tension:.3, spanGaps:false }));
+  const ranks=sorted.flatMap(c=>{ const wm=c.t.years.get(y)||new Map(); return [...wm.entries()].filter(([w,e])=>w<=upTo&&e.rank!=null).map(([,e])=>e.rank); });
+  const rankMax=Math.max(10, ...ranks);
+  drawChart('chartBump','line',{ labels, datasets:ds },
+    { layout:{ padding:{ right:96 } },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.dataset.label+': #'+c.parsed.y } } },
+      scales:{ y:{ reverse:true, min:1, max:rankMax, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } }, x:{ ticks:{ maxTicksLimit:14 } } } },
+    [raceLabelPlugin]);
+}
+window.raceToggle=function(id){ if(raceState.selected.has(id)) raceState.selected.delete(id); else raceState.selected.add(id); renderRaceMeta(currentYear); renderRaceChart(currentYear); };
+window.raceSetSort=function(v){ raceState.sort=v; raceState.statPage=0; renderRace(currentYear); };
+window.raceSetWeek=function(v){ raceState.upTo=Math.max(1,+v||1); const l=$('raceWeekLabel'); if(l) l.textContent='W1–W'+raceState.upTo; renderRaceChart(currentYear); };
+window.raceStatSize=function(n){ raceState.statSize=+n; raceState.statPage=0; renderRaceMeta(currentYear); };
+window.raceStatPage=function(d){ raceState.statPage=(raceState.statPage||0)+d; renderRaceMeta(currentYear); };
+window.raceCarToggle=function(){ raceState.carExpanded=!raceState.carExpanded; renderRaceMeta(currentYear); };
 
 /* ───────── Dự đoán tuần tới ───────── */
 function renderPrediction(y){
@@ -644,10 +764,10 @@ function findTrackByLabel(label){
 Chart.defaults.color='#5A5A5A';
 Chart.defaults.borderColor='rgba(10,10,10,.10)';
 Chart.defaults.font.family='"Libre Franklin", system-ui, sans-serif';
-function drawChart(id,type,data,options){
+function drawChart(id,type,data,options,plugins){
   if(charts[id]){ charts[id].destroy(); delete charts[id]; }
   const ctx=$(id); if(!ctx) return;
-  charts[id]=new Chart(ctx,{ type, data, options:Object.assign({responsive:true, maintainAspectRatio:false}, options) });
+  charts[id]=new Chart(ctx,{ type, data, options:Object.assign({responsive:true, maintainAspectRatio:false}, options), plugins:plugins||[] });
 }
 
 /* ───────── utils / nav ───────── */

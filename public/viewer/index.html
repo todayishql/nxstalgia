@@ -92,9 +92,39 @@
       <div class="records" id="records"></div>
     </div>
     <div class="panel">
-      <h2>The #1 Race</h2>
-      <div class="chartbox tall"><canvas id="chartBump"></canvas></div>
-      <div class="hint">Rank trajectories of songs that reached #1 during the year (ordered by when they peaked). Click a legend entry to hide/show a song.</div>
+      <div class="race-head">
+        <div>
+          <h2 style="margin:0">The #1 Race</h2>
+          <div class="hint" style="margin:2px 0 0">Weekly rank trajectories of the champions.</div>
+        </div>
+        <div class="race-controls">
+          <label for="raceSort">Sort by</label>
+          <select id="raceSort" onchange="raceSetSort(this.value)">
+            <option value="weeks">Weeks at #1</option>
+            <option value="peakStream">Peak streams</option>
+            <option value="peakWeek">Peak week</option>
+            <option value="first">First #1</option>
+          </select>
+        </div>
+      </div>
+      <div class="race-grid">
+        <div class="race-chart">
+          <div class="chartbox tall"><canvas id="chartBump"></canvas></div>
+          <div class="race-slider">
+            <label for="raceWeek">Weekly view</label>
+            <input type="range" id="raceWeek" min="1" max="52" oninput="raceSetWeek(this.value)">
+            <span id="raceWeekLabel" class="mono"></span>
+          </div>
+        </div>
+        <div class="race-stats">
+          <h3>Champion Stats Comparison</h3>
+          <div id="champStats"></div>
+        </div>
+      </div>
+      <div class="race-carousel">
+        <div class="hint" style="margin:14px 0 0"><b>Champions' Carousel</b> — toggle which songs appear on the chart.</div>
+        <div id="champCarousel" class="chip-row"></div>
+      </div>
     </div>
     <div class="grid2">
       <div class="panel">

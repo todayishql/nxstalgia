@@ -68,6 +68,9 @@ th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bor
 th { color: var(--muted); font-weight: 600; }
 td input { padding: 6px 8px; }
 tr:hover td { background: var(--panel2); }
+tr.sel td { background: rgba(91,224,176,.10); }
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--text); }
 
 .thumb { width: 40px; height: 40px; border-radius: 6px; background: var(--panel2); background-size: cover; background-position: center; display: inline-block; }
 
