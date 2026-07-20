@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../api';
 
-const EMPTY = { id: '', name: '', artist: '', aid: '', baseline: 0 };
+const EMPTY = { id: '', name: '', artist: '', aid: '', baseline: 0, artworkUrl: '' };
 
 export default function TracksPage() {
   const [items, setItems] = useState([]);
@@ -35,7 +35,11 @@ export default function TracksPage() {
 
   async function saveEdit(id) {
     try {
-      await api('/api/admin/tracks/' + encodeURIComponent(id), { method: 'PUT', body: edit });
+      // gửi kèm artworkUrl + refetchArtwork:false -> sửa metadata KHÔNG làm mất ảnh bìa
+      await api('/api/admin/tracks/' + encodeURIComponent(id), {
+        method: 'PUT',
+        body: { ...edit, refetchArtwork: false },
+      });
       setEditing(null); flash('ok', 'Đã lưu: ' + id); load(q);
     } catch (err) { flash('err', err.message); }
   }
@@ -78,6 +82,12 @@ export default function TracksPage() {
               <input type="number" value={form.baseline} onChange={(e) => setForm({ ...form, baseline: e.target.value })} />
             </div>
           </div>
+          <div className="row" style={{ marginTop: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label>URL ảnh bìa (tuỳ chọn)</label>
+              <input value={form.artworkUrl} onChange={(e) => setForm({ ...form, artworkUrl: e.target.value })} placeholder="https://..." />
+            </div>
+          </div>
           <div className="row" style={{ marginTop: 14 }}>
             <button type="submit">Thêm</button>
           </div>
@@ -106,7 +116,10 @@ export default function TracksPage() {
             {items.map((t) => (
               <tr key={t.id}>
                 <td>
-                  <span className="thumb" style={t.artworkUrl ? { backgroundImage: `url(${t.artworkUrl})` } : {}} />
+                  {(() => {
+                    const url = editing === t.id ? edit.artworkUrl : t.artworkUrl;
+                    return <span className="thumb" style={url ? { backgroundImage: `url(${url})` } : {}} />;
+                  })()}
                 </td>
                 <td className="muted">{t.id}</td>
                 {editing === t.id ? (
@@ -114,7 +127,7 @@ export default function TracksPage() {
                     <td><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
                     <td><input value={edit.artist} onChange={(e) => setEdit({ ...edit, artist: e.target.value })} /></td>
                     <td><input type="number" value={edit.baseline} onChange={(e) => setEdit({ ...edit, baseline: e.target.value })} /></td>
-                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
+                    <td><input value={edit.artworkUrl} placeholder="URL ảnh bìa" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
                     <td className="row">
                       <button className="sm" onClick={() => saveEdit(t.id)}>Lưu</button>
                       <button className="ghost sm" onClick={() => setEditing(null)}>Huỷ</button>
@@ -127,7 +140,7 @@ export default function TracksPage() {
                     <td>{t.baseline}</td>
                     <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
                     <td className="row">
-                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline }); }}>Sửa</button>
+                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, artworkUrl: t.artworkUrl || '' }); }}>Sửa</button>
                       <button className="ghost sm" onClick={() => refetchArt(t.id)}>Ảnh</button>
                       <button className="danger sm" onClick={() => remove(t.id)}>Xoá</button>
                     </td>
