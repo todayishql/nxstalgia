@@ -30,7 +30,7 @@ export const POST = handle(async (req) => {
   await requireAuth();
   await dbConnect();
   const body = await req.json();
-  const { id, aid, name, artist, baseline } = body;
+  const { id, aid, name, artist, baseline, artworkUrl } = body;
   if (!id || !name || !artist) return json({ error: 'Cần id, name, artist' }, 400);
 
   const exists = await Track.findById(id);
@@ -43,7 +43,8 @@ export const POST = handle(async (req) => {
     artist,
     artists: Array.isArray(body.artists) && body.artists.length ? body.artists : splitArtists(artist),
     baseline: Number(baseline) || 0,
-    artworkStatus: 'pending',
+    artworkUrl: artworkUrl || '',
+    artworkStatus: artworkUrl ? 'ok' : 'pending',
   });
   return json({ track: { id: doc._id, ...doc.toObject(), _id: undefined } }, 201);
 });
