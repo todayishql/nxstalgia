@@ -130,6 +130,13 @@ export default function TracksPage() {
     } catch (err) { flash('err', err.message); }
   }
 
+  async function refetchGenre(id) {
+    try {
+      const r = await api('/api/admin/genre/' + encodeURIComponent(id), { method: 'POST' });
+      flash(r.found ? 'ok' : 'err', r.found ? `${id}: ${r.genre}` : `${id}: no genre found`); load();
+    } catch (err) { flash('err', err.message); }
+  }
+
   // ─── chọn nhiều ───────────────────────────────────────────
   function toggle(id) {
     setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -383,6 +390,7 @@ export default function TracksPage() {
                     <td className="row">
                       <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
                       <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
+                      {!t.genre && <button className="ghost sm" onClick={() => refetchGenre(t.id)}>Genre</button>}
                       <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
                     </td>
                   </>
