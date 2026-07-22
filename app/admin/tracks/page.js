@@ -1,11 +1,28 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { api } from '../api';
 import { groupInt, onlyDigits } from '../format';
 import { parseCsv, toCsv } from '../csv';
 
 const EMPTY = { name: '', artist: '', baseline: '', artworkUrl: '' };
+
+// Bỏ cặp nháy kép bao quanh 1 ô (cho trường hợp dán tab-separated từ Sheets/Excel).
+const unquote = (s) => String(s ?? '').trim().replace(/^"(.*)"$/s, '$1').trim();
+
+// Phân tích text dán vào -> [{name, artist, baseline}]. Mỗi dòng 1 bài: name, artist, baseline.
+// Có tab -> tách theo tab (dán từ Sheets); ngược lại parse CSV (hỗ trợ ô trong "" chứa dấu phẩy).
+function parsePastedRows(text) {
+  const t = String(text || '');
+  if (!t.trim()) return [];
+  const rows = /\t/.test(t)
+    ? t.split(/\r?\n/).map((line) => line.split('\t').map(unquote))
+    : parseCsv(t).map((r) => r.map((c) => (c || '').trim()));
+  return rows
+    .filter((r) => r.some((c) => c !== ''))
+    .map((r) => ({ name: r[0] || '', artist: r[1] || '', baseline: onlyDigits(r[2] || '') }))
+    .filter((r) => r.name && r.artist);
+}
 
 export default function TracksPage() {
   const [items, setItems] = useState([]);
@@ -14,6 +31,8 @@ export default function TracksPage() {
   const [query, setQuery] = useState(''); // truy vấn đã áp dụng (khác ô nhập q)
   const [msg, setMsg] = useState(null);
   const [form, setForm] = useState(EMPTY);
+  const [addMode, setAddMode] = useState('single'); // 'single' | 'bulk' (dán danh sách)
+  const [pasteText, setPasteText] = useState('');
   const [editing, setEditing] = useState(null); // id đang sửa
   const [edit, setEdit] = useState({});
   const [selected, setSelected] = useState(new Set());
@@ -39,6 +58,13 @@ export default function TracksPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Search-as-you-type: debounce ô nhập -> áp query (không cần nút Search).
+  useEffect(() => {
+    const id = setTimeout(() => { setQuery(q.trim()); setPage(0); }, 300);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  const parsedPaste = useMemo(() => parsePastedRows(pasteText), [pasteText]);
   const pages = Math.max(1, Math.ceil(total / pageSize));
   function sortBy(field) {
     if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -49,7 +75,6 @@ export default function TracksPage() {
     const n = Math.max(1, Math.min(500, parseInt(sizeInput, 10) || 100));
     setSizeInput(String(n)); setPageSize(n); setPage(0);
   }
-  function runSearch() { setQuery(q.trim()); setPage(0); }
   const arrow = (f) => (sortField === f ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
 
   function flash(type, text) { setMsg({ type, text }); }
@@ -63,6 +88,18 @@ export default function TracksPage() {
       });
       setForm(EMPTY); flash('ok', `Added song: ${r.track.name} (${r.track.id})`); load();
     } catch (err) { flash('err', err.message); }
+  }
+
+  // Dán danh sách: mỗi dòng name, artist, baseline -> import hàng loạt (bỏ qua bài trùng).
+  async function importPasted() {
+    if (!parsedPaste.length) { flash('err', 'No valid lines. Each line: name, artist, baseline'); return; }
+    setBusy(true);
+    try {
+      const res = await api('/api/admin/tracks/import', { method: 'POST', body: { rows: parsedPaste } });
+      flash('ok', `Imported ${res.added} new songs · ${res.skippedDuplicate} duplicates skipped${res.skippedInvalid ? ` · ${res.skippedInvalid} invalid` : ''}.`);
+      setPasteText(''); setSelected(new Set()); load();
+    } catch (err) { flash('err', err.message); }
+    finally { setBusy(false); }
   }
 
   async function saveEdit(id) {
@@ -166,8 +203,40 @@ export default function TracksPage() {
   return (
     <>
       <div className="panel">
-        <h2>Add song</h2>
-        <form onSubmit={create}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Add songs</h2>
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className={addMode === 'single' ? 'sm' : 'ghost sm'} onClick={() => setAddMode('single')}>One song</button>
+            <button type="button" className={addMode === 'bulk' ? 'sm' : 'ghost sm'} onClick={() => setAddMode('bulk')}>Paste list</button>
+          </div>
+        </div>
+
+        {addMode === 'bulk' ? (
+          <div style={{ marginTop: 12 }}>
+            <label>Paste one song per line — <code>name, artist, baseline</code> (baseline optional)</label>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={8}
+              style={{ width: '100%', fontFamily: 'var(--mono, monospace)', fontSize: 13 }}
+              placeholder={'"thankyou next","Ariana Grande",34452095\n"7 rings","Ariana Grande",28100000'}
+            />
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {parsedPaste.length} valid song{parsedPaste.length === 1 ? '' : 's'} detected · duplicates (same name + artist) auto-skipped
+              </span>
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="ghost sm" onClick={() => fileRef.current?.click()} disabled={busy}>Or upload CSV</button>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={onImportFile} />
+                <button type="button" onClick={importPasted} disabled={busy || !parsedPaste.length}>
+                  {busy ? 'Importing…' : `Import${parsedPaste.length ? ` ${parsedPaste.length}` : ''}`}
+                </button>
+              </div>
+            </div>
+            {msg && <div className={`msg ${msg.type}`} style={{ marginTop: 10 }}>{msg.text}</div>}
+          </div>
+        ) : (
+        <form onSubmit={create} style={{ marginTop: 12 }}>
           <div className="row">
             <div style={{ flex: 1, minWidth: 160 }}>
               <label>Song name</label>
@@ -195,27 +264,27 @@ export default function TracksPage() {
             </span>
           </div>
         </form>
+        )}
       </div>
 
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
           <h2 style={{ margin: 0 }}>Songs ({total})</h2>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <button className="danger sm" onClick={deleteSelected} disabled={busy || !selected.size}>
-              Delete selected ({selected.size})
-            </button>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative' }}>
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name / artist / id…" style={{ minWidth: 240, paddingRight: q ? 26 : undefined }} />
+              {q && (
+                <button type="button" className="ghost sm" onClick={() => setQ('')} aria-label="Clear search"
+                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: '0 6px', border: 'none', background: 'none' }}>×</button>
+              )}
+            </div>
+            {selected.size > 0 && (
+              <button className="danger sm" onClick={deleteSelected} disabled={busy}>Delete selected ({selected.size})</button>
+            )}
             <button className="ghost sm" onClick={exportCsv} disabled={busy}>Export CSV</button>
-            <button className="ghost sm" onClick={() => fileRef.current?.click()} disabled={busy}>Import CSV</button>
-            <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={onImportFile} />
-            <form onSubmit={(e) => { e.preventDefault(); runSearch(); }}>
-              <div className="row">
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name / artist / id" />
-                <button className="ghost sm" type="submit">Search</button>
-              </div>
-            </form>
           </div>
         </div>
-        {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
+        {msg && addMode !== 'bulk' && <div className={`msg ${msg.type}`}>{msg.text}</div>}
 
         <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, margin: '8px 0 4px' }}>
           <div className="row" style={{ gap: 6 }}>
@@ -286,7 +355,8 @@ export default function TracksPage() {
           </tbody>
         </table>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Import CSV columns: <code>track_name</code>, <code>artist</code> (required), <code>baseline</code>, <code>artwork_url</code> (optional).
+          Bulk add via <strong>Paste list</strong> (one song per line: name, artist, baseline) or <strong>upload CSV</strong>
+          (columns <code>track_name</code>, <code>artist</code> required; <code>baseline</code>, <code>artwork_url</code> optional).
           New songs get an auto-generated ID; rows matching an existing song (same name + artist) are skipped.
         </p>
       </div>

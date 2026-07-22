@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Skill(run)"
+      "Skill(run)",
+      "Bash(node --check public/viewer/app.js)",
+      "Bash(curl -s http://localhost:3000/api/bootstrap)",
+      "Bash(node -e 'let d=\"\";process.stdin.on\\(\"data\",c=>d+=c\\).on\\(\"end\",\\(\\)=>{const j=JSON.parse\\(d\\);const collab=j.tracks.find\\(t=>Array.isArray\\(t.artists\\)&&t.artists.length>1\\);console.log\\(\"sample collab:\",collab?`${collab.name} | artist=\"${collab.artist}\" | artists=${JSON.stringify\\(collab.artists\\)}`:\"\\(none found\\)\"\\);console.log\\(\"tracks with artists[] field:\",j.tracks.filter\\(t=>Array.isArray\\(t.artists\\)\\).length,\"/\",j.tracks.length\\);}\\)')",
+      "Bash(curl -s http://localhost:3000/viewer/app.js)",
+      "Bash(curl -s http://localhost:3000/viewer/index.html)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git merge *)"
     ]
   }
 }
