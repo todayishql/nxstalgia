@@ -31,6 +31,7 @@ export const PUT = handle(async (req, ctx) => {
   }
   if (body.aid != null) update.aid = body.aid;
   if (body.baseline != null) update.baseline = Number(body.baseline) || 0;
+  if (body.genre != null) update.genre = String(body.genre).trim();
   if (body.artworkUrl != null) {
     update.artworkUrl = body.artworkUrl;
     update.artworkStatus = body.artworkUrl ? 'ok' : 'none';

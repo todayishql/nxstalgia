@@ -33,7 +33,7 @@ async function loadData(){
 function buildModel(){
   const tracks = new Map();
   for(const t of DATA.tracks){
-    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
+    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), genre:(t.genre||'').trim(), artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
   }
   for(const e of DATA.entries){
     const t = tracks.get(e.trackId); if(!t) continue;
@@ -721,6 +721,9 @@ function renderAllTime(){
     <div class="kpi"><div class="lbl">Songs with data</div><div class="val">${list.length}</div><div class="note">of ${model.tracks.size} songs in catalog</div></div>
     <div class="kpi"><div class="lbl">Artists</div><div class="val">${Object.keys(artists).length}</div><div class="note">years tracked: ${model.yearList.join(', ')}</div></div>`;
 
+  // ── Thống kê theo genre (ngay dưới KPIs) ──
+  renderAllTimeGenres(list, grand);
+
   const q=($('atSearch').value||'').trim().toLowerCase();
   if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
   const filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
@@ -739,7 +742,7 @@ function renderAllTime(){
       <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
       <td style="text-align:center">${mv}</td>
       <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
-      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}</div></td>
+      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}</div></td>
       <td class="num">${t.baseline?fmt(t.baseline):'—'}</td>
       <td class="num">${fmt(t.trackedTotal)}</td>
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
@@ -758,6 +761,34 @@ function renderAllTime(){
   },{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}},
      onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
   hydrateThumbs();
+}
+// Thống kê theo genre: gộp stream + số bài theo thể loại, vẽ thanh tỉ lệ (Unknown xếp cuối).
+function renderAllTimeGenres(list, grand){
+  const gEl=$('atGenres'); if(!gEl) return;
+  const gSub=$('atGenreSub');
+  const byGenre={};
+  for(const t of list){ const g=(t.genre||'').trim()||'Unknown'; if(!byGenre[g]) byGenre[g]={streams:0,songs:0}; byGenre[g].streams+=t.allTotal; byGenre[g].songs++; }
+  const unknown=byGenre['Unknown'];
+  const known=Object.entries(byGenre).filter(([g])=>g!=='Unknown').sort((a,b)=>b[1].streams-a[1].streams);
+  if(!known.length){
+    gEl.innerHTML='<div class="hint" style="margin:0">No genre data yet — songs get a genre in /admin (auto-filled from iTunes when cover art is fetched).</div>';
+    if(gSub) gSub.textContent='';
+    return;
+  }
+  const tagged=list.length-(unknown?unknown.songs:0);
+  if(gSub) gSub.textContent=`${known.length} genre${known.length>1?'s':''} · ${tagged} of ${list.length} songs tagged`;
+  const ordered=unknown?[...known,['Unknown',unknown]]:known;
+  const gMax=Math.max(1,...ordered.map(([,s])=>s.streams));
+  gEl.innerHTML='<div class="gstats">'+ordered.map(([g,s])=>{
+    const isU=g==='Unknown';
+    const pct=grand?Math.round(s.streams/grand*100):0;
+    const w=Math.max(2,Math.round(s.streams/gMax*100));
+    return `<div class="gstat">
+      <span class="gname"${isU?' style="color:var(--faint);font-weight:600"':''}>${esc(g)}</span>
+      <span class="gbar"><i style="width:${w}%${isU?';background:var(--faint)':''}"></i></span>
+      <span class="gval">${s.songs} song${s.songs>1?'s':''} · ${abbr(s.streams)} · ${pct}%</span>
+    </div>`;
+  }).join('')+'</div>';
 }
 /* ───────── tiện ích danh mục (gợi ý cho ô So sánh 1-vs-1) ───────── */
 function fillTrackOptions(){

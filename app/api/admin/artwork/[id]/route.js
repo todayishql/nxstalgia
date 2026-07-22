@@ -14,9 +14,10 @@ export const POST = handle(async (req, ctx) => {
   const track = await Track.findById(id);
   if (!track) return json({ error: 'Track not found' }, 404);
 
-  const { url, status } = await fetchArtwork({ name: track.name, artist: track.artist });
+  const { url, status, genre } = await fetchArtwork({ name: track.name, artist: track.artist });
   track.artworkUrl = url;
   track.artworkStatus = status;
+  if (genre && !track.genre) track.genre = genre; // chỉ điền khi trống, không đè giá trị đã sửa tay
   await track.save();
-  return json({ id, artworkUrl: url, artworkStatus: status });
+  return json({ id, artworkUrl: url, artworkStatus: status, genre: track.genre });
 });
