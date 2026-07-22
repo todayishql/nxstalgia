@@ -30,6 +30,22 @@ export default function Dashboard() {
     }
   }
 
+  async function refreshGenre() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api('/api/admin/genre', { method: 'POST', body: { limit: 25 } });
+      setMsg({
+        type: 'ok',
+        text: `Genre — processed ${r.processed}: filled ${r.ok}, none ${r.none}, errors ${r.failed}. Still missing: ${r.remaining}.`,
+      });
+      await load();
+    } catch (e) {
+      setMsg({ type: 'err', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!stats) return <div className="muted">{msg ? msg.text : 'Loading…'}</div>;
 
   return (
@@ -63,8 +79,24 @@ export default function Dashboard() {
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
           Artwork is fetched server-side using the primary artist (artists[0]), so collab songs with commas are handled too.
-          The same iTunes lookup also <strong>auto-fills the genre</strong> for songs that don’t have one yet
-          ({stats.genre?.missing ?? 0} still missing) — no extra requests.
+          The same iTunes lookup also <strong>auto-fills the genre</strong> for songs that don’t have one yet — no extra requests.
+        </p>
+      </div>
+
+      <div className="panel">
+        <h2>Genre (iTunes)</h2>
+        <div className="row">
+          <span className="pill ok">has genre {stats.genre?.filled ?? 0}</span>
+          <span className="pill pending">missing {stats.genre?.missing ?? 0}</span>
+        </div>
+        <div className="row" style={{ marginTop: 14 }}>
+          <button onClick={refreshGenre} disabled={busy || (stats.genre?.missing ?? 0) === 0}>
+            {busy ? 'Fetching…' : `Fetch genre for ${stats.genre?.missing ?? 0} songs without genre (25/run)`}
+          </button>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+          Looks up the genre from iTunes for songs that still have none — including songs that already have cover art.
+          Existing genres are never overwritten. Run again to process the next 25.
         </p>
       </div>
     </>
