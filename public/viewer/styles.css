@@ -203,6 +203,18 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--red); outline-of
 .record .rd{font-family:var(--mono); color:var(--red); font-size:13px; margin-top:2px}
 .entry-row{display:grid; grid-template-columns:1fr 90px 110px 38px; gap:8px; margin-bottom:8px}
 @media(max-width:640px){ .entry-row{grid-template-columns:1fr 70px 90px 34px} }
+
+/* All-time: thống kê theo genre (thanh chia tỉ lệ theo tổng stream) */
+.gstats{display:flex; flex-direction:column; gap:10px}
+.gstat{display:grid; grid-template-columns:minmax(84px,132px) 1fr auto; gap:14px; align-items:center; font-size:12.5px}
+.gstat .gname{font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.gstat .gbar{height:8px; background:var(--rule-soft); overflow:hidden}
+.gstat .gbar>i{display:block; height:100%; background:var(--ink)}
+.gstat .gval{font-family:var(--mono); font-size:11.5px; color:var(--muted); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
+@media(max-width:560px){ .gstat{grid-template-columns:1fr auto; gap:4px 10px} .gstat .gbar{grid-column:1/-1; order:3} }
+/* tag genre nhỏ trong danh sách bài */
+.gtag{display:inline-block; margin-left:8px; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--faint); border:1px solid var(--rule-soft); padding:1px 6px; vertical-align:1px}
 .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--ink); border:none;
   color:var(--paper); padding:12px 22px; border-radius:0; font-weight:600; font-size:13.5px; z-index:99; display:none; max-width:90vw}
 .searchbar{width:100%; max-width:420px}

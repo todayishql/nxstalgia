@@ -41,6 +41,7 @@ export default function Dashboard() {
           <div className="card"><div className="num">{stats.entries}</div><div className="lbl">Weekly entries</div></div>
           <div className="card"><div className="num">{stats.years.join(', ') || '—'}</div><div className="lbl">Years with data</div></div>
           <div className="card"><div className="num">{stats.artwork.ok}</div><div className="lbl">Has cover art</div></div>
+          <div className="card"><div className="num">{stats.genre?.filled ?? 0}</div><div className="lbl">Has genre</div></div>
         </div>
       </div>
 
@@ -62,6 +63,8 @@ export default function Dashboard() {
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
           Artwork is fetched server-side using the primary artist (artists[0]), so collab songs with commas are handled too.
+          The same iTunes lookup also <strong>auto-fills the genre</strong> for songs that don’t have one yet
+          ({stats.genre?.missing ?? 0} still missing) — no extra requests.
         </p>
       </div>
     </>

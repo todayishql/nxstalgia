@@ -12,16 +12,18 @@ export const GET = handle(async () => {
   await requireAuth();
   await dbConnect();
 
-  const [tracks, entries, artByStatus, years, settings] = await Promise.all([
+  const [tracks, entries, artByStatus, genreFilled, years, settings] = await Promise.all([
     Track.countDocuments(),
     Entry.countDocuments(),
     Track.aggregate([{ $group: { _id: '$artworkStatus', n: { $sum: 1 } } }]),
+    Track.countDocuments({ genre: { $nin: ['', null] } }),
     Entry.distinct('year'),
     Settings.findById('config').lean(),
   ]);
 
   const artwork = { ok: 0, none: 0, pending: 0 };
   for (const a of artByStatus) if (a._id in artwork) artwork[a._id] = a.n;
+  const genre = { filled: genreFilled, missing: Math.max(0, tracks - genreFilled) };
 
-  return json({ tracks, entries, artwork, years: years.sort((a, b) => a - b), settings });
+  return json({ tracks, entries, artwork, genre, years: years.sort((a, b) => a - b), settings });
 });

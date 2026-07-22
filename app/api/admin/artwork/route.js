@@ -21,9 +21,10 @@ export const POST = handle(async (req) => {
   let ok = 0, none = 0, failed = 0;
   for (const track of tracks) {
     try {
-      const { url, status } = await fetchArtwork({ name: track.name, artist: track.artist });
+      const { url, status, genre } = await fetchArtwork({ name: track.name, artist: track.artist });
       track.artworkUrl = url;
       track.artworkStatus = status;
+      if (genre && !track.genre) track.genre = genre; // auto-fill genre khi trống
       await track.save();
       status === 'ok' ? ok++ : none++;
     } catch {

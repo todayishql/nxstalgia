@@ -41,6 +41,7 @@ export const POST = handle(async (req) => {
           artist,
           artists: splitArtists(artist),
           baseline: Number(String(r.baseline ?? '').replace(/[^\d]/g, '')) || 0,
+          genre: String(r.genre || '').trim(),
           artworkUrl,
           artworkStatus: artworkUrl ? 'ok' : 'pending',
         },

@@ -9,6 +9,7 @@ const TrackSchema = new mongoose.Schema(
     artist: { type: String, required: true, trim: true }, // hiển thị nguyên văn
     artists: { type: [String], default: [] }, // tách sẵn -> fix ảnh bìa collab + nhóm nghệ sĩ
     baseline: { type: Number, default: 0 }, // stream tích luỹ trước khi lên chart
+    genre: { type: String, default: '', trim: true }, // thể loại; auto-fill từ iTunes khi tra ảnh bìa
     artworkUrl: { type: String, default: '' },
     artworkStatus: {
       type: String,

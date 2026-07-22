@@ -4,13 +4,14 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { api } from '../api';
 import { groupInt, onlyDigits } from '../format';
 import { parseCsv, toCsv } from '../csv';
+import { GENRES } from '@/lib/genres';
 
-const EMPTY = { name: '', artist: '', baseline: '', artworkUrl: '' };
+const EMPTY = { name: '', artist: '', baseline: '', genre: '', artworkUrl: '' };
 
 // Bỏ cặp nháy kép bao quanh 1 ô (cho trường hợp dán tab-separated từ Sheets/Excel).
 const unquote = (s) => String(s ?? '').trim().replace(/^"(.*)"$/s, '$1').trim();
 
-// Phân tích text dán vào -> [{name, artist, baseline}]. Mỗi dòng 1 bài: name, artist, baseline.
+// Phân tích text dán vào -> [{name, artist, baseline, genre}]. Mỗi dòng: name, artist, baseline, genre.
 // Có tab -> tách theo tab (dán từ Sheets); ngược lại parse CSV (hỗ trợ ô trong "" chứa dấu phẩy).
 function parsePastedRows(text) {
   const t = String(text || '');
@@ -20,7 +21,7 @@ function parsePastedRows(text) {
     : parseCsv(t).map((r) => r.map((c) => (c || '').trim()));
   return rows
     .filter((r) => r.some((c) => c !== ''))
-    .map((r) => ({ name: r[0] || '', artist: r[1] || '', baseline: onlyDigits(r[2] || '') }))
+    .map((r) => ({ name: r[0] || '', artist: r[1] || '', baseline: onlyDigits(r[2] || ''), genre: (r[3] || '').trim() }))
     .filter((r) => r.name && r.artist);
 }
 
@@ -36,6 +37,7 @@ export default function TracksPage() {
   const [editing, setEditing] = useState(null); // id đang sửa
   const [edit, setEdit] = useState({});
   const [selected, setSelected] = useState(new Set());
+  const [bulkGenre, setBulkGenre] = useState(''); // gán genre cho các bài đang chọn
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
   // phân trang + sort
@@ -84,7 +86,7 @@ export default function TracksPage() {
     try {
       const r = await api('/api/admin/tracks', {
         method: 'POST',
-        body: { name: form.name, artist: form.artist, baseline: form.baseline, artworkUrl: form.artworkUrl },
+        body: { name: form.name, artist: form.artist, baseline: form.baseline, genre: form.genre, artworkUrl: form.artworkUrl },
       });
       setForm(EMPTY); flash('ok', `Added song: ${r.track.name} (${r.track.id})`); load();
     } catch (err) { flash('err', err.message); }
@@ -140,6 +142,20 @@ export default function TracksPage() {
     });
   }
 
+  // Gán 1 genre cho tất cả bài đang chọn (fill nhanh hàng loạt).
+  async function applyGenre() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    const genre = bulkGenre.trim();
+    setBusy(true);
+    try {
+      const r = await api('/api/admin/tracks', { method: 'PATCH', body: { ids, genre } });
+      flash('ok', `Set genre "${genre || '(cleared)'}" on ${r.modified} song(s).`);
+      setSelected(new Set()); setBulkGenre(''); load();
+    } catch (err) { flash('err', err.message); }
+    finally { setBusy(false); }
+  }
+
   async function deleteSelected() {
     const ids = [...selected];
     if (!ids.length) return;
@@ -158,8 +174,8 @@ export default function TracksPage() {
     setBusy(true);
     try {
       const d = await api('/api/admin/tracks?all=1');
-      const rows = d.items.map((t) => [t.id, t.name, t.artist, t.baseline || 0, t.artworkUrl || '']);
-      const csv = toCsv(['track_id', 'track_name', 'artist', 'baseline', 'artwork_url'], rows);
+      const rows = d.items.map((t) => [t.id, t.name, t.artist, t.baseline || 0, t.genre || '', t.artworkUrl || '']);
+      const csv = toCsv(['track_id', 'track_name', 'artist', 'baseline', 'genre', 'artwork_url'], rows);
       const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = 'nxstalgia-songs.csv'; a.click();
@@ -183,11 +199,13 @@ export default function TracksPage() {
       const iName = find(['track_name', 'name', 'song', 'title']);
       const iArtist = find(['artist', 'full_artists', 'artists', 'artist_name']);
       const iBase = find(['baseline', 'past_streams', 'past streams', 'baseline_streams']);
+      const iGenre = find(['genre', 'category', 'the_loai', 'thể loại']);
       const iArt = find(['artwork_url', 'track_img', 'image', 'cover', 'cover_art']);
       if (iName < 0 || iArtist < 0) { flash('err', 'CSV must have "track_name" and "artist" columns.'); return; }
       const payload = rows.slice(1).map((r) => ({
         name: r[iName], artist: r[iArtist],
         baseline: iBase >= 0 ? r[iBase] : '',
+        genre: iGenre >= 0 ? r[iGenre] : '',
         artworkUrl: iArt >= 0 ? r[iArt] : '',
       })).filter((x) => (x.name || '').trim() && (x.artist || '').trim());
       if (!payload.length) { flash('err', 'No valid rows found in CSV.'); return; }
@@ -202,6 +220,10 @@ export default function TracksPage() {
 
   return (
     <>
+      <datalist id="genre-suggestions">
+        {GENRES.map((g) => <option key={g} value={g} />)}
+      </datalist>
+
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <h2 style={{ margin: 0 }}>Add songs</h2>
@@ -213,13 +235,13 @@ export default function TracksPage() {
 
         {addMode === 'bulk' ? (
           <div style={{ marginTop: 12 }}>
-            <label>Paste one song per line — <code>name, artist, baseline</code> (baseline optional)</label>
+            <label>Paste one song per line — <code>name, artist, baseline, genre</code> (baseline &amp; genre optional)</label>
             <textarea
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               rows={8}
               style={{ width: '100%', fontFamily: 'var(--mono, monospace)', fontSize: 13 }}
-              placeholder={'"thankyou next","Ariana Grande",34452095\n"7 rings","Ariana Grande",28100000'}
+              placeholder={'"thankyou next","Ariana Grande",34452095,Pop\n"7 rings","Ariana Grande",28100000,Pop'}
             />
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               <span className="muted" style={{ fontSize: 12 }}>
@@ -250,6 +272,11 @@ export default function TracksPage() {
               <label>Baseline</label>
               <input inputMode="numeric" value={groupInt(form.baseline)} onChange={(e) => setForm({ ...form, baseline: onlyDigits(e.target.value) })} />
             </div>
+            <div style={{ flex: '0 0 170px' }}>
+              <label>Genre</label>
+              <input list="genre-suggestions" value={form.genre} placeholder="auto from iTunes if blank"
+                onChange={(e) => setForm({ ...form, genre: e.target.value })} />
+            </div>
           </div>
           <div className="row" style={{ marginTop: 12 }}>
             <div style={{ flex: 1 }}>
@@ -279,7 +306,14 @@ export default function TracksPage() {
               )}
             </div>
             {selected.size > 0 && (
-              <button className="danger sm" onClick={deleteSelected} disabled={busy}>Delete selected ({selected.size})</button>
+              <>
+                <span className="row" style={{ gap: 4 }}>
+                  <input list="genre-suggestions" value={bulkGenre} placeholder="Genre…" style={{ width: 140 }}
+                    onChange={(e) => setBulkGenre(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') applyGenre(); }} />
+                  <button className="sm" onClick={applyGenre} disabled={busy}>Set genre for {selected.size}</button>
+                </span>
+                <button className="danger sm" onClick={deleteSelected} disabled={busy}>Delete selected ({selected.size})</button>
+              </>
             )}
             <button className="ghost sm" onClick={exportCsv} disabled={busy}>Export CSV</button>
           </div>
@@ -311,6 +345,7 @@ export default function TracksPage() {
               <th className="sortable" onClick={() => sortBy('name')}>Name{arrow('name')}</th>
               <th className="sortable" onClick={() => sortBy('artist')}>Artist{arrow('artist')}</th>
               <th className="sortable" onClick={() => sortBy('baseline')}>Baseline{arrow('baseline')}</th>
+              <th className="sortable" onClick={() => sortBy('genre')}>Genre{arrow('genre')}</th>
               <th className="sortable" onClick={() => sortBy('status')}>Cover art{arrow('status')}</th>
               <th></th>
             </tr>
@@ -331,6 +366,7 @@ export default function TracksPage() {
                     <td><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
                     <td><input value={edit.artist} onChange={(e) => setEdit({ ...edit, artist: e.target.value })} /></td>
                     <td><input inputMode="numeric" value={groupInt(edit.baseline)} onChange={(e) => setEdit({ ...edit, baseline: onlyDigits(e.target.value) })} /></td>
+                    <td><input list="genre-suggestions" value={edit.genre} placeholder="Genre" onChange={(e) => setEdit({ ...edit, genre: e.target.value })} /></td>
                     <td><input value={edit.artworkUrl} placeholder="Cover art URL" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
                     <td className="row">
                       <button className="sm" onClick={() => saveEdit(t.id)}>Save</button>
@@ -342,9 +378,10 @@ export default function TracksPage() {
                     <td>{t.name}</td>
                     <td>{t.artist}</td>
                     <td>{groupInt(t.baseline)}</td>
+                    <td>{t.genre ? <span className="pill">{t.genre}</span> : <span className="muted">—</span>}</td>
                     <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
                     <td className="row">
-                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
+                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
                       <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
                       <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
                     </td>
@@ -355,9 +392,11 @@ export default function TracksPage() {
           </tbody>
         </table>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Bulk add via <strong>Paste list</strong> (one song per line: name, artist, baseline) or <strong>upload CSV</strong>
-          (columns <code>track_name</code>, <code>artist</code> required; <code>baseline</code>, <code>artwork_url</code> optional).
+          Bulk add via <strong>Paste list</strong> (one song per line: name, artist, baseline, genre) or <strong>upload CSV</strong>
+          (columns <code>track_name</code>, <code>artist</code> required; <code>baseline</code>, <code>genre</code>, <code>artwork_url</code> optional).
           New songs get an auto-generated ID; rows matching an existing song (same name + artist) are skipped.
+          <br />
+          <strong>Quick-fill genre:</strong> leave it blank and it auto-fills from iTunes when cover art is fetched (Dashboard → “Fetch artwork”), or tick songs and use <em>Set genre for N</em> above.
         </p>
       </div>
     </>
