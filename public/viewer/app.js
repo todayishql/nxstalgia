@@ -797,42 +797,61 @@ function renderAllTimeGenres(list, grand){
     </div>`;
   }).join('')+'</div>';
 }
-// Bảng xếp hạng total stream theo giới tính nghệ sĩ.
-// Credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists"); nhóm Male / Female / Group.
+// Bảng xếp hạng NGHỆ SĨ theo giới tính: chọn nhóm (Male/Female/Group) -> list nghệ sĩ rank theo total stream.
+// Credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists").
+let atGender=null;          // nhóm đang chọn
+let atGenderData=null;      // {Male:[...], Female:[...], Group:[...]} nghệ sĩ đã xếp hạng
+window.setAtGender=function(g){ atGender=g; drawAtGenderTable(); };
+
 function renderAllTimeGender(list){
   const box=$('atGenderStats'), sub=$('atGenderSub'); if(!box) return;
-  const G={ Male:{streams:0,songs:new Set(),artists:new Set()}, Female:{streams:0,songs:new Set(),artists:new Set()}, Group:{streams:0,songs:new Set(),artists:new Set()} };
-  const untagged=new Set(), tagged=new Set();
+  const GK={ male:'Male', female:'Female', group:'Group' };
+  const agg=new Map(); // artistKey -> { name, gender, streams, songs:Set }
+  const untagged=new Set();
   for(const t of list){
     for(const a of t.artists){
-      const g=ARTMETA.get(artistKey(a))?.gender;
-      const label = g==='male'?'Male' : g==='female'?'Female' : (g==='group')?'Group' : null;
-      if(label){ G[label].streams+=t.allTotal; G[label].artists.add(artistKey(a)); G[label].songs.add(t.id); tagged.add(artistKey(a)); }
-      else untagged.add(artistKey(a));
+      const key=artistKey(a); const label=GK[ARTMETA.get(key)?.gender];
+      if(!label){ untagged.add(key); continue; }
+      let e=agg.get(key); if(!e){ e={ name:a, gender:label, streams:0, songs:new Set() }; agg.set(key,e); }
+      e.streams+=t.allTotal; e.songs.add(t.id);
     }
   }
-  const totalTagged=['Male','Female','Group'].reduce((s,k)=>s+G[k].streams,0);
-  if(!totalTagged){
+  atGenderData={ Male:[], Female:[], Group:[] };
+  for(const e of agg.values()) atGenderData[e.gender].push(e);
+  for(const k of ['Male','Female','Group']) atGenderData[k].sort((a,b)=>b.streams-a.streams);
+
+  const tagged=agg.size;
+  if(!tagged){
     if(sub) sub.textContent='';
     box.innerHTML='<div class="hint" style="margin:0">No artist gender data yet — tag artists in <strong>/admin/artists</strong> (Male / Female / Group).</div>';
     return;
   }
-  if(sub) sub.textContent=`${tagged.size} artist${tagged.size>1?'s':''} tagged${untagged.size?` · ${untagged.size} untagged`:''}`;
-  const ranked=['Male','Female','Group'].map(k=>({k,...G[k]})).sort((a,b)=>b.streams-a.streams);
-  box.innerHTML=`<table>
-    <thead><tr><th style="text-align:center">#</th><th>Gender</th><th style="text-align:right">Artists</th><th style="text-align:right">Songs</th><th style="text-align:right">Total streams</th><th style="text-align:right">Share</th></tr></thead>
-    <tbody>${ranked.map((r,i)=>{
-      const pct=totalTagged?Math.round(r.streams/totalTagged*100):0;
-      return `<tr>
-        <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
-        <td>${r.k}</td>
-        <td class="num">${r.artists.size}</td>
-        <td class="num">${r.songs.size}</td>
-        <td class="num" style="color:var(--gold);font-weight:700">${fmt(r.streams)}</td>
-        <td class="num">${pct}%</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
+  if(sub) sub.textContent=`${tagged} artist${tagged>1?'s':''} tagged${untagged.size?` · ${untagged.size} untagged`:''}`;
+  // mặc định chọn nhóm đông nghệ sĩ nhất (nếu nhóm đang chọn rỗng)
+  if(!atGender || !atGenderData[atGender]?.length){
+    atGender=['Male','Female','Group'].sort((a,b)=>atGenderData[b].length-atGenderData[a].length)[0];
+  }
+  drawAtGenderTable();
+}
+// Vẽ toggle nhóm + bảng nghệ sĩ của nhóm đang chọn (không tính lại số liệu).
+function drawAtGenderTable(){
+  const box=$('atGenderStats'); if(!box||!atGenderData) return;
+  const tabs=['Male','Female','Group'].map(k=>{
+    const n=atGenderData[k].length; const on=k===atGender;
+    return `<button type="button" class="pill${on?' on':''}" ${n?'':'disabled'} onclick="setAtGender('${k}')">${k} · ${n}</button>`;
+  }).join('');
+  const rows=atGenderData[atGender]||[];
+  const body=rows.length ? rows.map((r,i)=>`<tr>
+      <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
+      <td class="clickable" onclick="openArtist('${escAttr(r.name)}')">${esc(r.name)}</td>
+      <td class="num">${r.songs.size}</td>
+      <td class="num" style="color:var(--gold);font-weight:700">${fmt(r.streams)}</td>
+    </tr>`).join('') : '<tr><td colspan="4"><div class="empty">No tagged artists in this group.</div></td></tr>';
+  box.innerHTML=`<div class="pill-row">${tabs}</div>
+    <table>
+      <thead><tr><th style="text-align:center">#</th><th>Artist</th><th style="text-align:right">Songs</th><th style="text-align:right">Total streams</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
 }
 /* ───────── tiện ích danh mục (gợi ý cho ô So sánh 1-vs-1) ───────── */
 function fillTrackOptions(){
