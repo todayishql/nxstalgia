@@ -8,6 +8,7 @@ import { api } from './api';
 const NAV = [
   { href: '/admin', label: 'Overview' },
   { href: '/admin/tracks', label: 'Songs' },
+  { href: '/admin/artists', label: 'Artists' },
   { href: '/admin/chart', label: 'Chart' },
 ];
 

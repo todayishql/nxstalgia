@@ -1,6 +1,7 @@
 /* ───────── state ───────── */
 // Dữ liệu lấy từ backend MongoDB qua /api/bootstrap (không còn SEED/localStorage)
-let DATA = { settings:{}, tracks:[], entries:[] };
+let DATA = { settings:{}, tracks:[], entries:[], artists:[] };
+let ARTMETA = new Map(); // artistKey -> { gender, region, genres }
 let SEED_YEAR = 2026;
 let model = null;
 let charts = {};
@@ -14,6 +15,8 @@ const abbr = n => { n=Number(n)||0; if(n>=1e9) return +(n/1e9).toFixed(1)+'B'; i
 // Tách nghệ sĩ collab (khớp lib/artists.js) — credit stream cho TỪNG nghệ sĩ, không gom theo chuỗi.
 const ART_SPLIT_RE=/\s*(?:,|&|\bx\b|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bvà\b|;|\/)\s*/i;
 const splitArtists = a => (a ? String(a).split(ART_SPLIT_RE).map(s=>s.trim()).filter(Boolean) : []);
+// Khoá nghệ sĩ chuẩn hoá (khớp lib/artists.js) -> join metadata gender/region.
+const artistKey = a => String(a||'').trim().toLowerCase().replace(/\s+/g,' ');
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', 3200); }
 
@@ -25,6 +28,8 @@ async function loadData(){
   DATA.settings = DATA.settings || {};
   DATA.tracks = DATA.tracks || [];
   DATA.entries = DATA.entries || [];
+  DATA.artists = DATA.artists || [];
+  ARTMETA = new Map(DATA.artists.map(a => [a.key, { gender:a.gender||'', region:a.region||'', genres:a.genres||[] }]));
   SEED_YEAR = DATA.settings.currentYear || DATA.entries[0]?.year || 2026;
   currentYear = SEED_YEAR;
 }
@@ -723,6 +728,8 @@ function renderAllTime(){
 
   // ── Thống kê theo genre (ngay dưới KPIs) ──
   renderAllTimeGenres(list, grand);
+  // ── Thống kê theo giới tính nghệ sĩ (Male / Female / Group) ──
+  renderAllTimeGender(list);
 
   const q=($('atSearch').value||'').trim().toLowerCase();
   if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
@@ -787,6 +794,46 @@ function renderAllTimeGenres(list, grand){
       <span class="gname"${isU?' style="color:var(--faint);font-weight:600"':''}>${esc(g)}</span>
       <span class="gbar"><i style="width:${w}%${isU?';background:var(--faint)':''}"></i></span>
       <span class="gval">${s.songs} song${s.songs>1?'s':''} · ${abbr(s.streams)} · ${pct}%</span>
+    </div>`;
+  }).join('')+'</div>';
+}
+// Thống kê theo giới tính nghệ sĩ: credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists").
+// Nhóm: Male / Female / Group; nghệ sĩ chưa gán -> tính vào "chưa gắn nhãn" (không vẽ).
+function renderAllTimeGender(list){
+  const box=$('atGenderStats'), sub=$('atGenderSub'); if(!box) return;
+  const G={ Male:{streams:0,artists:new Set()}, Female:{streams:0,artists:new Set()}, Group:{streams:0,artists:new Set()} };
+  const untagged=new Set(), tagged=new Set();
+  for(const t of list){
+    for(const a of t.artists){
+      const m=ARTMETA.get(artistKey(a)); const g=m&&m.gender;
+      const label = g==='male'?'Male' : g==='female'?'Female' : (g==='group')?'Group' : null;
+      if(label){ G[label].streams+=t.allTotal; G[label].artists.add(artistKey(a)); tagged.add(artistKey(a)); }
+      else untagged.add(artistKey(a));
+    }
+  }
+  const order=['Male','Female','Group'];
+  const totalTagged=order.reduce((s,k)=>s+G[k].streams,0);
+  if(!totalTagged){
+    if(sub) sub.textContent='';
+    box.innerHTML='<div class="hint" style="margin:0">No artist gender data yet — tag artists in <strong>/admin/artists</strong> (Male / Female / Group).</div>';
+    if(charts['chartAtGender']){ charts['chartAtGender'].destroy(); delete charts['chartAtGender']; }
+    return;
+  }
+  if(sub) sub.textContent=`${tagged.size} artist${tagged.size>1?'s':''} tagged${untagged.size?` · ${untagged.size} untagged`:''}`;
+  const COLORS={ Male:'#333333', Female:'#C8102E', Group:'#8F8F8F' };
+  drawChart('chartAtGender','doughnut',{
+    labels: order,
+    datasets:[{ data: order.map(k=>G[k].streams), backgroundColor: order.map(k=>COLORS[k]), borderColor:'#EFEFEF', borderWidth:2 }]
+  },{ cutout:'58%', plugins:{ legend:{ position:'bottom', labels:{ color:'#4A4A4A', boxWidth:10, font:{size:12} } },
+      tooltip:{ callbacks:{ label:c=>{ const v=c.parsed; const p=totalTagged?Math.round(v/totalTagged*100):0; return `${c.label}: ${abbr(v)} · ${p}%`; } } } } });
+  // dải số liệu dưới chart
+  box.innerHTML='<div class="gstats" style="margin-top:14px">'+order.map(k=>{
+    const s=G[k]; const pct=totalTagged?Math.round(s.streams/totalTagged*100):0;
+    const w=Math.max(2,Math.round(s.streams/Math.max(1,...order.map(x=>G[x].streams))*100));
+    return `<div class="gstat">
+      <span class="gname">${k}</span>
+      <span class="gbar"><i style="width:${w}%;background:${COLORS[k]}"></i></span>
+      <span class="gval">${s.artists.size} artist${s.artists.size===1?'':'s'} · ${abbr(s.streams)} · ${pct}%</span>
     </div>`;
   }).join('')+'</div>';
 }
