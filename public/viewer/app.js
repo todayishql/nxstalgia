@@ -797,45 +797,42 @@ function renderAllTimeGenres(list, grand){
     </div>`;
   }).join('')+'</div>';
 }
-// Thống kê theo giới tính nghệ sĩ: credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists").
-// Nhóm: Male / Female / Group; nghệ sĩ chưa gán -> tính vào "chưa gắn nhãn" (không vẽ).
+// Bảng xếp hạng total stream theo giới tính nghệ sĩ.
+// Credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists"); nhóm Male / Female / Group.
 function renderAllTimeGender(list){
   const box=$('atGenderStats'), sub=$('atGenderSub'); if(!box) return;
-  const G={ Male:{streams:0,artists:new Set()}, Female:{streams:0,artists:new Set()}, Group:{streams:0,artists:new Set()} };
+  const G={ Male:{streams:0,songs:new Set(),artists:new Set()}, Female:{streams:0,songs:new Set(),artists:new Set()}, Group:{streams:0,songs:new Set(),artists:new Set()} };
   const untagged=new Set(), tagged=new Set();
   for(const t of list){
     for(const a of t.artists){
-      const m=ARTMETA.get(artistKey(a)); const g=m&&m.gender;
+      const g=ARTMETA.get(artistKey(a))?.gender;
       const label = g==='male'?'Male' : g==='female'?'Female' : (g==='group')?'Group' : null;
-      if(label){ G[label].streams+=t.allTotal; G[label].artists.add(artistKey(a)); tagged.add(artistKey(a)); }
+      if(label){ G[label].streams+=t.allTotal; G[label].artists.add(artistKey(a)); G[label].songs.add(t.id); tagged.add(artistKey(a)); }
       else untagged.add(artistKey(a));
     }
   }
-  const order=['Male','Female','Group'];
-  const totalTagged=order.reduce((s,k)=>s+G[k].streams,0);
+  const totalTagged=['Male','Female','Group'].reduce((s,k)=>s+G[k].streams,0);
   if(!totalTagged){
     if(sub) sub.textContent='';
     box.innerHTML='<div class="hint" style="margin:0">No artist gender data yet — tag artists in <strong>/admin/artists</strong> (Male / Female / Group).</div>';
-    if(charts['chartAtGender']){ charts['chartAtGender'].destroy(); delete charts['chartAtGender']; }
     return;
   }
   if(sub) sub.textContent=`${tagged.size} artist${tagged.size>1?'s':''} tagged${untagged.size?` · ${untagged.size} untagged`:''}`;
-  const COLORS={ Male:'#333333', Female:'#C8102E', Group:'#8F8F8F' };
-  drawChart('chartAtGender','doughnut',{
-    labels: order,
-    datasets:[{ data: order.map(k=>G[k].streams), backgroundColor: order.map(k=>COLORS[k]), borderColor:'#EFEFEF', borderWidth:2 }]
-  },{ cutout:'58%', plugins:{ legend:{ position:'bottom', labels:{ color:'#4A4A4A', boxWidth:10, font:{size:12} } },
-      tooltip:{ callbacks:{ label:c=>{ const v=c.parsed; const p=totalTagged?Math.round(v/totalTagged*100):0; return `${c.label}: ${abbr(v)} · ${p}%`; } } } } });
-  // dải số liệu dưới chart
-  box.innerHTML='<div class="gstats" style="margin-top:14px">'+order.map(k=>{
-    const s=G[k]; const pct=totalTagged?Math.round(s.streams/totalTagged*100):0;
-    const w=Math.max(2,Math.round(s.streams/Math.max(1,...order.map(x=>G[x].streams))*100));
-    return `<div class="gstat">
-      <span class="gname">${k}</span>
-      <span class="gbar"><i style="width:${w}%;background:${COLORS[k]}"></i></span>
-      <span class="gval">${s.artists.size} artist${s.artists.size===1?'':'s'} · ${abbr(s.streams)} · ${pct}%</span>
-    </div>`;
-  }).join('')+'</div>';
+  const ranked=['Male','Female','Group'].map(k=>({k,...G[k]})).sort((a,b)=>b.streams-a.streams);
+  box.innerHTML=`<table>
+    <thead><tr><th style="text-align:center">#</th><th>Gender</th><th style="text-align:right">Artists</th><th style="text-align:right">Songs</th><th style="text-align:right">Total streams</th><th style="text-align:right">Share</th></tr></thead>
+    <tbody>${ranked.map((r,i)=>{
+      const pct=totalTagged?Math.round(r.streams/totalTagged*100):0;
+      return `<tr>
+        <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
+        <td>${r.k}</td>
+        <td class="num">${r.artists.size}</td>
+        <td class="num">${r.songs.size}</td>
+        <td class="num" style="color:var(--gold);font-weight:700">${fmt(r.streams)}</td>
+        <td class="num">${pct}%</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 }
 /* ───────── tiện ích danh mục (gợi ý cho ô So sánh 1-vs-1) ───────── */
 function fillTrackOptions(){
