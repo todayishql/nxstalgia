@@ -185,6 +185,7 @@
       <div id="atGenderStats"></div>
     </div>
     <div class="panel">
+<<<<<<< HEAD
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
         <h2 style="margin:0">🏛️ All-time Hall of Fame</h2>
         <input type="text" id="atSearch" placeholder="Search songs / artists…" style="max-width:260px">
@@ -199,6 +200,75 @@
     <div class="panel">
       <h2>Top artists all-time</h2>
       <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
+=======
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+        <h2 style="margin:0">🏛️ Bảng vàng All-time</h2>
+        <input type="text" id="atSearch" placeholder="Tìm bài / nghệ sĩ…" style="max-width:260px">
+      </div>
+      <div class="pill-row" id="atRegionFilter">
+        <span class="pill on" data-region="ALL">Tất cả khu vực</span>
+        <span class="pill" data-region="US-UK">US-UK</span>
+        <span class="pill" data-region="ASIA">ASIA</span>
+      </div>
+      <table id="atTableEl">
+        <thead><tr>
+          <th style="text-align:center">#</th><th></th>
+          <th class="sortable" id="atTh-name" data-sort="name">Bài hát</th>
+          <th class="sortable" style="text-align:right" id="atTh-baseline" data-sort="baseline">Trước chart</th>
+          <th class="sortable" style="text-align:right" id="atTh-tracked" data-sort="tracked">Trong chart</th>
+          <th class="sortable" style="text-align:right" id="atTh-all" data-sort="all">All-time</th>
+          <th class="sortable" style="text-align:right" id="atTh-peak" data-sort="peak">Peak</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="atTable"></tbody>
+      </table>
+      <div class="hint">"Trước chart" = tổng stream tích lũy trước khi chart tồn tại (trước 2026). Số này cộng vào all-time nhưng không ảnh hưởng bảng xếp hạng tuần. Bấm vào tiêu đề cột để sắp xếp · Bấm ✎ để nhập/sửa từng bài.</div>
+    </div>
+    <div class="panel">
+      <h2>🎚️ Ước lượng stream trước chart</h2>
+      <p class="hint" style="margin:0 0 12px">Cho các bài ra mắt trước khi có chart: chọn bài, gán <b>mức độ nghe từng năm</b>, hệ thống tính tổng stream tích lũy đến hiện tại. MAX ×1.5 · HIGH ×1.25 · MEDIUM ×1.2 · NORMAL ×1.1 · LOW ×1.05 · MUTE ×1 (đứng yên).</p>
+      <div class="controls">
+        <input type="text" list="trackOptions" id="estTrack" placeholder="Bài hát (khớp danh mục)" style="flex:1;min-width:180px">
+        <label style="color:var(--muted);font-size:13px">Ra mắt</label>
+        <input type="number" id="estStart" min="1990" max="2100" placeholder="2015" style="width:90px">
+        <label style="color:var(--muted);font-size:13px">Đến hết</label>
+        <input type="number" id="estEnd" min="1990" max="2100" value="2025" style="width:90px">
+        <label style="color:var(--muted);font-size:13px">Base</label>
+        <input type="number" id="estBase" min="1" value="500" style="width:80px">
+        <button class="btn small" id="estBuild">Tạo bảng năm</button>
+      </div>
+      <div class="est-years" id="estYears"></div>
+      <div id="estResult"></div>
+      <div class="controls" style="margin-top:12px"><button class="btn" id="estApply">Áp vào baseline của bài</button></div>
+    </div>
+    <div class="panel">
+      <h2>Nhập nhanh số liệu trước chart</h2>
+      <p class="hint" style="margin:0 0 8px">Mỗi dòng: <code>tên bài | tổng stream trước 2026</code>. Tên bài được khớp tự động với danh mục.</p>
+      <textarea id="baselineBox" rows="7" style="width:100%" placeholder="thank u, next | 25000&#10;7 Rings | 18000&#10;All I Want For Christmas Is You | 40000"></textarea>
+      <div class="controls" style="margin-top:8px"><button class="btn small" id="baselineBtn">Lưu số liệu</button></div>
+      <div id="baselineLog" class="hint"></div>
+    </div>
+
+    <!-- 2 biểu đồ (genre + top nghệ sĩ) đặt ở cuối tab All-time -->
+    <div class="grid2">
+      <div class="panel">
+        <h2>Thể loại theo stream all-time</h2>
+        <div class="chartbox tall"><canvas id="chartAtGenres"></canvas></div>
+        <div class="hint">Top 9 thể loại chiếm % stream cao nhất · phần còn lại gộp vào "Khác".</div>
+      </div>
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+          <h2 style="margin:0">Top nghệ sĩ all-time</h2>
+          <div class="week-nav">
+            <button class="iconbtn" id="atArtistPrev" aria-label="Trang nghệ sĩ trước">‹</button>
+            <div class="week-label" id="atArtistPageLabel" style="min-width:170px;font-size:12px">—</div>
+            <button class="iconbtn" id="atArtistNext" aria-label="Trang nghệ sĩ sau">›</button>
+          </div>
+        </div>
+        <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
+        <div class="hint">Tối đa 10 nghệ sĩ/trang · bấm vào cột để mở trang nghệ sĩ.</div>
+      </div>
+>>>>>>> 66bf399 (fix all-time chart)
     </div>
   </section>
 

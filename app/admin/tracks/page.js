@@ -6,6 +6,7 @@ import { groupInt, onlyDigits } from '../format';
 import { parseCsv, toCsv } from '../csv';
 import { GENRES } from '@/lib/genres';
 
+<<<<<<< HEAD
 const EMPTY = { name: '', artist: '', baseline: '', genre: '', artworkUrl: '' };
 
 // Bỏ cặp nháy kép bao quanh 1 ô (cho trường hợp dán tab-separated từ Sheets/Excel).
@@ -24,6 +25,9 @@ function parsePastedRows(text) {
     .map((r) => ({ name: r[0] || '', artist: r[1] || '', baseline: onlyDigits(r[2] || ''), genre: (r[3] || '').trim() }))
     .filter((r) => r.name && r.artist);
 }
+=======
+const EMPTY = { id: '', name: '', artist: '', aid: '', baseline: 0, genre: '', region: '' };
+>>>>>>> 66bf399 (fix all-time chart)
 
 export default function TracksPage() {
   const [items, setItems] = useState([]);
@@ -290,6 +294,18 @@ export default function TracksPage() {
               <label>Cover art URL (optional)</label>
               <input value={form.artworkUrl} onChange={(e) => setForm({ ...form, artworkUrl: e.target.value })} placeholder="https://..." />
             </div>
+            <div style={{ flex: '0 0 140px' }}>
+              <label>Thể loại</label>
+              <input value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} placeholder="Pop, R&B…" />
+            </div>
+            <div style={{ flex: '0 0 130px' }}>
+              <label>Khu vực</label>
+              <select value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}>
+                <option value="">— Chưa gán —</option>
+                <option value="US-UK">US-UK</option>
+                <option value="ASIA">ASIA</option>
+              </select>
+            </div>
           </div>
           <div className="row" style={{ marginTop: 14 }}>
             <button type="submit">Add</button>
@@ -346,6 +362,7 @@ export default function TracksPage() {
         <table>
           <thead>
             <tr>
+<<<<<<< HEAD
               <th style={{ width: 28 }}><input type="checkbox" checked={allOn} onChange={toggleAll} aria-label="Select all" /></th>
               <th>Image</th>
               <th className="sortable" onClick={() => sortBy('id')}>ID{arrow('id')}</th>
@@ -355,6 +372,9 @@ export default function TracksPage() {
               <th className="sortable" onClick={() => sortBy('genre')}>Genre{arrow('genre')}</th>
               <th className="sortable" onClick={() => sortBy('status')}>Cover art{arrow('status')}</th>
               <th></th>
+=======
+              <th>Ảnh</th><th>ID</th><th>Tên</th><th>Nghệ sĩ</th><th>Baseline</th><th>Thể loại</th><th>Khu vực</th><th>Ảnh bìa</th><th></th>
+>>>>>>> 66bf399 (fix all-time chart)
             </tr>
           </thead>
           <tbody>
@@ -372,9 +392,22 @@ export default function TracksPage() {
                   <>
                     <td><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
                     <td><input value={edit.artist} onChange={(e) => setEdit({ ...edit, artist: e.target.value })} /></td>
+<<<<<<< HEAD
                     <td><input inputMode="numeric" value={groupInt(edit.baseline)} onChange={(e) => setEdit({ ...edit, baseline: onlyDigits(e.target.value) })} /></td>
                     <td><input list="genre-suggestions" value={edit.genre} placeholder="Genre" onChange={(e) => setEdit({ ...edit, genre: e.target.value })} /></td>
                     <td><input value={edit.artworkUrl} placeholder="Cover art URL" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
+=======
+                    <td><input type="number" value={edit.baseline} onChange={(e) => setEdit({ ...edit, baseline: e.target.value })} /></td>
+                    <td><input value={edit.genre} onChange={(e) => setEdit({ ...edit, genre: e.target.value })} placeholder="Pop, R&B…" /></td>
+                    <td>
+                      <select value={edit.region} onChange={(e) => setEdit({ ...edit, region: e.target.value })}>
+                        <option value="">— Chưa gán —</option>
+                        <option value="US-UK">US-UK</option>
+                        <option value="ASIA">ASIA</option>
+                      </select>
+                    </td>
+                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
+>>>>>>> 66bf399 (fix all-time chart)
                     <td className="row">
                       <button className="sm" onClick={() => saveEdit(t.id)}>Save</button>
                       <button className="ghost sm" onClick={() => setEditing(null)}>Cancel</button>
@@ -384,6 +417,7 @@ export default function TracksPage() {
                   <>
                     <td>{t.name}</td>
                     <td>{t.artist}</td>
+<<<<<<< HEAD
                     <td>{groupInt(t.baseline)}</td>
                     <td>{t.genre ? <span className="pill">{t.genre}</span> : <span className="muted">—</span>}</td>
                     <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
@@ -392,6 +426,16 @@ export default function TracksPage() {
                       <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
                       {!t.genre && <button className="ghost sm" onClick={() => refetchGenre(t.id)}>Genre</button>}
                       <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
+=======
+                    <td>{t.baseline}</td>
+                    <td>{t.genre || '—'}</td>
+                    <td>{t.region || '—'}</td>
+                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
+                    <td className="row">
+                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', region: t.region || '' }); }}>Sửa</button>
+                      <button className="ghost sm" onClick={() => refetchArt(t.id)}>Ảnh</button>
+                      <button className="danger sm" onClick={() => remove(t.id)}>Xoá</button>
+>>>>>>> 66bf399 (fix all-time chart)
                     </td>
                   </>
                 )}

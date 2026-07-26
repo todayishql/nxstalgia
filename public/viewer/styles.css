@@ -172,6 +172,9 @@ td.num{font-family:var(--mono); font-size:13px; color:var(--ink2); text-align:ri
 .mv.new{color:var(--paper); background:var(--red); padding:2px 7px; letter-spacing:.1em}
 .mv.re{color:var(--ink); border:1px solid var(--ink); padding:1px 6px; letter-spacing:.1em}
 .clickable{cursor:pointer}
+th.sortable{cursor:pointer; user-select:none; white-space:nowrap}
+th.sortable:hover{color:var(--ink)}
+th.sortable.sort-on{color:var(--ink)}
 
 /* ── Controls / form ───────────────────────────────────── */
 .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px}

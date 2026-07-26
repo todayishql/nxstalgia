@@ -16,11 +16,19 @@ const TrackSchema = new mongoose.Schema(
       enum: ['pending', 'ok', 'none'],
       default: 'pending',
     },
+    genre: { type: String, default: '', trim: true }, // thể loại — dùng cho biểu đồ phân bố genre ở tab All-time
+    region: {
+      // khu vực nghệ sĩ — dùng để lọc Bảng vàng All-time
+      type: String,
+      enum: ['', 'US-UK', 'ASIA'],
+      default: '',
+    },
   },
   { timestamps: true, _id: false }
 );
 
 TrackSchema.index({ artist: 1 });
 TrackSchema.index({ artworkStatus: 1 });
+TrackSchema.index({ region: 1 });
 
 export default mongoose.models.Track || mongoose.model('Track', TrackSchema);

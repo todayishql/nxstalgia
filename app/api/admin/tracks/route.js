@@ -37,8 +37,13 @@ export const POST = handle(async (req) => {
   await requireAuth();
   await dbConnect();
   const body = await req.json();
+<<<<<<< HEAD
   const { aid, name, artist, baseline, artworkUrl, genre } = body;
   if (!name || !artist) return json({ error: 'name and artist are required' }, 400);
+=======
+  const { id, aid, name, artist, baseline, genre, region } = body;
+  if (!id || !name || !artist) return json({ error: 'Cần id, name, artist' }, 400);
+>>>>>>> 66bf399 (fix all-time chart)
 
   const existing = await Track.find({}, { name: 1, artist: 1 }).lean();
   const keys = new Set(existing.map((t) => songKey(t.name, t.artist)));
@@ -54,9 +59,15 @@ export const POST = handle(async (req) => {
     artist,
     artists: Array.isArray(body.artists) && body.artists.length ? body.artists : splitArtists(artist),
     baseline: Number(baseline) || 0,
+<<<<<<< HEAD
     genre: String(genre || '').trim(),
     artworkUrl: artworkUrl || '',
     artworkStatus: artworkUrl ? 'ok' : 'pending',
+=======
+    genre: genre || '',
+    region: ['US-UK', 'ASIA'].includes(region) ? region : '',
+    artworkStatus: 'pending',
+>>>>>>> 66bf399 (fix all-time chart)
   });
   return json({ track: { id: doc._id, ...doc.toObject(), _id: undefined } }, 201);
 });

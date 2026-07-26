@@ -7,6 +7,9 @@ let model = null;
 let charts = {};
 let currentYear = SEED_YEAR;
 let selectedWeek = null;
+let atRegion = 'ALL';                       // bộ lọc khu vực ở Bảng vàng All-time: ALL | US-UK | ASIA
+let atSort = { key:'all', dir:'desc' };      // cột đang sort ở Bảng vàng All-time
+let atArtistPage = 0;                        // trang hiện tại của biểu đồ Top nghệ sĩ all-time
 
 const $ = id => document.getElementById(id);
 const fmt = n => (n==null ? '—' : n.toLocaleString('en-US'));
@@ -38,7 +41,11 @@ async function loadData(){
 function buildModel(){
   const tracks = new Map();
   for(const t of DATA.tracks){
+<<<<<<< HEAD
     tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), genre:(t.genre||'').trim(), artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
+=======
+    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, genre:t.genre||'', region:t.region||'', years:new Map(), user:false });
+>>>>>>> 66bf399 (fix all-time chart)
   }
   for(const e of DATA.entries){
     const t = tracks.get(e.trackId); if(!t) continue;
@@ -711,12 +718,62 @@ window.openArtist = function(name){
 }
 
 /* ───────── All-time ───────── */
+<<<<<<< HEAD
 let atPage=0, atQuery=''; // phân trang Hall of Fame (100/trang)
 window.atGoPage=function(d){ atPage+=d; renderAllTime(); };
+=======
+const AT_SORT_LABEL = { name:'Bài hát', baseline:'Trước chart', tracked:'Trong chart', all:'All-time', peak:'Peak' };
+const AT_SORT_DEFAULT_DIR = { name:'asc', baseline:'desc', tracked:'desc', all:'desc', peak:'asc' };
+const AT_SORT_GETTER = {
+  name: t=>t.name.toLowerCase(),
+  baseline: t=>t.baseline||0,
+  tracked: t=>t.trackedTotal||0,
+  all: t=>t.allTotal||0,
+  peak: t=>t.allPeak, // giữ null -> luôn xếp cuối dù sort chiều nào
+};
+function atSortRows(rows){
+  const get=AT_SORT_GETTER[atSort.key]||AT_SORT_GETTER.all;
+  const dir=atSort.dir;
+  return [...rows].sort((a,b)=>{
+    const va=get(a), vb=get(b);
+    const an=(va==null), bn=(vb==null);
+    if(an&&bn) return 0;
+    if(an) return 1;
+    if(bn) return -1;
+    if(typeof va==='string') return dir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
+    return dir==='asc'?va-vb:vb-va;
+  });
+}
+function atUpdateSortHeaders(){
+  for(const key of Object.keys(AT_SORT_LABEL)){
+    const th=$('atTh-'+key); if(!th) continue;
+    const on=atSort.key===key;
+    th.textContent=AT_SORT_LABEL[key]+(on?(atSort.dir==='asc'?' ▲':' ▼'):'');
+    th.classList.toggle('sort-on', on);
+  }
+}
+// Top 9 genre theo tổng stream all-time, phần còn lại gộp vào "Khác"
+const GENRE_COLORS=['#0A0A0A','#242424','#3A3A3A','#4F4F4F','#656565','#7A7A7A','#909090','#A5A5A5','#BABABA','#D6D6D6'];
+function genreBreakdown(list){
+  const sums={};
+  for(const t of list){ const g=(t.genre||'').trim()||'Chưa phân loại'; sums[g]=(sums[g]||0)+t.allTotal; }
+  const sorted=Object.entries(sums).sort((a,b)=>b[1]-a[1]);
+  const total=sorted.reduce((s,x)=>s+x[1],0);
+  const rows=sorted.slice(0,9);
+  const restSum=sorted.slice(9).reduce((s,x)=>s+x[1],0);
+  if(restSum>0) rows.push(['Khác', restSum]);
+  return { rows, total };
+}
+>>>>>>> 66bf399 (fix all-time chart)
 function renderAllTime(){
   const list=[...model.tracks.values()].filter(t=>t.allTotal>0);
+<<<<<<< HEAD
   list.sort((a,b)=>b.allTotal-a.allTotal);
   const artists={}; for(const t of list) for(const a of t.artists) artists[a]=(artists[a]||0)+t.allTotal;
+=======
+  list.sort((a,b)=>b.allTotal-a.allTotal); // thứ tự gốc — quyết định số hạng "#" cố định, không đổi khi sort/lọc bảng
+  const artists={}; for(const t of list) artists[t.artist]=(artists[t.artist]||0)+t.allTotal;
+>>>>>>> 66bf399 (fix all-time chart)
   const grand=list.reduce((s,t)=>s+t.allTotal,0);
   const grandBase=list.reduce((s,t)=>s+t.baseline,0);
   const n1=list[0];
@@ -732,6 +789,7 @@ function renderAllTime(){
   renderAllTimeGender(list);
 
   const q=($('atSearch').value||'').trim().toLowerCase();
+<<<<<<< HEAD
   if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
   const filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
   const size=100, total=filtered.length, pages=Math.max(1,Math.ceil(total/size));
@@ -745,28 +803,63 @@ function renderAllTime(){
     const pos=rankOf.get(t.id);
     const delta=(preRankOf.get(t.id)||pos)-pos; // >0: on-chart đẩy hạng lên so với chỉ pre-chart
     const mv = delta>0 ? `<span class="mv up">▲${delta}</span>` : delta<0 ? `<span class="mv down">▼${-delta}</span>` : '';
+=======
+  let shown=q?list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)):list;
+  if(atRegion!=='ALL') shown=shown.filter(t=>t.region===atRegion);
+  shown=atSortRows(shown).slice(0,100);
+  atUpdateSortHeaders();
+  $('atTable').innerHTML = shown.map((t,i)=>{
+    const pos=list.indexOf(t)+1;
+>>>>>>> 66bf399 (fix all-time chart)
     return `<tr>
       <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
       <td style="text-align:center">${mv}</td>
       <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
+<<<<<<< HEAD
       <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}</div></td>
+=======
+      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">BẠN THÊM</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.region?' · '+esc(t.region):''}</div></td>
+>>>>>>> 66bf399 (fix all-time chart)
       <td class="num">${t.baseline?fmt(t.baseline):'—'}</td>
       <td class="num">${fmt(t.trackedTotal)}</td>
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
     </tr>`;
+<<<<<<< HEAD
   }).join('') || '<tr><td colspan="7"><div class="empty">No songs found.</div></td></tr>';
   const pg=$('atPager');
   if(pg) pg.innerHTML = total>size ? `
     <button class="pg" onclick="atGoPage(-1)" ${atPage<=0?'disabled':''}>‹</button>
     <span>${atPage*size+1}–${Math.min(total,atPage*size+size)} of ${total}</span>
     <button class="pg" onclick="atGoPage(1)" ${atPage>=pages-1?'disabled':''}>›</button>` : '';
+=======
+  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion!=='ALL'?'Chưa có bài nào gán khu vực '+esc(atRegion)+'.':'Không tìm thấy bài nào.'}</div></td></tr>`;
+>>>>>>> 66bf399 (fix all-time chart)
 
-  const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  // Genre — top 9 theo % cao nhất, phần còn lại gộp "Khác"
+  const {rows:genreRows, total:genreTotal} = genreBreakdown(list);
+  drawChart('chartAtGenres','doughnut',{
+    labels: genreRows.map(r=>r[0]),
+    datasets:[{ data: genreRows.map(r=>r[1]), backgroundColor:GENRE_COLORS.slice(0,genreRows.length), borderColor:'#EFEFEF', borderWidth:2 }]
+  },{ plugins:{ legend:{ position:'right', labels:{color:'#4A4A4A', boxWidth:12} },
+       tooltip:{ callbacks:{ label:c=>{ const v=c.parsed; const p=genreTotal?Math.round(v/genreTotal*100):0; return c.label+': '+fmt(v)+' stream ('+p+'%)'; } } } } });
+
+  // Top nghệ sĩ all-time — phân trang 10/trang
+  const allArtists=Object.entries(artists).sort((a,b)=>b[1]-a[1]);
+  const totalPages=Math.max(1, Math.ceil(allArtists.length/10));
+  if(atArtistPage>totalPages-1) atArtistPage=totalPages-1;
+  if(atArtistPage<0) atArtistPage=0;
+  const pageArtists=allArtists.slice(atArtistPage*10, atArtistPage*10+10);
   drawChart('chartAtArtists','bar',{
-    labels: topA.map(x=>x[0]),
-    datasets:[{ data: topA.map(x=>x[1]), backgroundColor:'#2E2E2E', borderRadius:0 }]
+    labels: pageArtists.map(x=>x[0]),
+    datasets:[{ data: pageArtists.map(x=>x[1]), backgroundColor:'#2E2E2E', borderRadius:0 }]
   },{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}},
-     onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
+     onClick:(ev,els)=>{ if(els.length) openArtist(pageArtists[els[0].index][0]); } });
+  $('atArtistPageLabel').textContent = allArtists.length
+    ? `#${atArtistPage*10+1}–${Math.min((atArtistPage+1)*10, allArtists.length)} / ${allArtists.length} nghệ sĩ`
+    : '—';
+  $('atArtistPrev').disabled = atArtistPage<=0;
+  $('atArtistNext').disabled = atArtistPage>=totalPages-1;
+
   hydrateThumbs();
 }
 // Thống kê theo genre: gộp stream + số bài theo thể loại, vẽ thanh tỉ lệ (Unknown xếp cuối).
@@ -954,6 +1047,25 @@ $('pngBtn').onclick=exportPNG;
 $('trackSearch').oninput=()=>renderTrackList();
 $('cmpBtn').onclick=runCompare;
 $('atSearch').oninput=()=>renderAllTime();
+<<<<<<< HEAD
+=======
+$('atRegionFilter').addEventListener('click', e=>{
+  const p=e.target.closest('.pill'); if(!p) return;
+  atRegion=p.dataset.region;
+  document.querySelectorAll('#atRegionFilter .pill').forEach(el=>el.classList.toggle('on', el===p));
+  renderAllTime();
+});
+$('atTableEl').querySelector('thead').addEventListener('click', e=>{
+  const th=e.target.closest('th[data-sort]'); if(!th) return;
+  const k=th.dataset.sort;
+  if(atSort.key===k) atSort.dir = atSort.dir==='asc'?'desc':'asc';
+  else atSort = { key:k, dir:AT_SORT_DEFAULT_DIR[k]||'desc' };
+  renderAllTime();
+});
+$('atArtistPrev').onclick=()=>{ if(atArtistPage>0){ atArtistPage--; renderAllTime(); } };
+$('atArtistNext').onclick=()=>{ atArtistPage++; renderAllTime(); };
+$('logYear').addEventListener('change',()=>{ const y=parseInt($('logYear').value,10); if(y) $('logWeek').value=(maxWeekOf(y)+1)||1; });
+>>>>>>> 66bf399 (fix all-time chart)
 
 (async function init(){
   try{
