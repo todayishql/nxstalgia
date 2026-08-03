@@ -30,6 +30,7 @@
     <button data-view="chart">Chart</button>
     <button data-view="analytics">Analytics</button>
     <button data-view="alltime">All-time</button>
+    <button data-view="awards">Awards</button>
     <button data-view="tracks">Songs</button>
   </nav>
 
@@ -211,6 +212,27 @@
         </div>
       </div>
       <div id="atBreakdown"></div>
+    </div>
+  </section>
+
+  <!-- ══ AWARDS ══ -->
+  <section class="view" id="view-awards">
+    <div class="kpis" id="awKpis"></div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0">🏆 Titles of the year</h2>
+        <span id="awSub" style="font-size:12px;color:var(--faint)"></span>
+      </div>
+      <div class="pill-row" id="awYears"></div>
+      <div id="awList"></div>
+    </div>
+    <div class="panel" id="awHonoursPanel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0">📜 Most decorated</h2>
+        <span id="awHonoursSub" style="font-size:12px;color:var(--faint)"></span>
+      </div>
+      <div id="awHonours"></div>
+      <div class="hint">Across every year on record. "Wins" counts 🏆 titles; "noms" counts every appearance in a category.</div>
     </div>
   </section>
 
