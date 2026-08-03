@@ -185,6 +185,15 @@
       <div id="atPager" class="race-pager" style="margin-top:12px"></div>
       <div class="hint">Click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to sort (click again to flip direction) — "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from a pre-chart-only ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort.</div>
     </div>
+    <div class="panel" id="atDistPanel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0">📈 Stream distribution</h2>
+        <span id="atDistSub" style="font-size:12px;color:var(--faint)"></span>
+      </div>
+      <div class="pill-row" id="atDistTabs"></div>
+      <div class="chartbox tall"><canvas id="chartAtDist"></canvas></div>
+      <div class="hint">How many songs sit in each 100,000,000-stream bin — bin <em>i</em> covers [<em>i</em>×100M, (<em>i</em>+1)×100M). The x-axis runs up to the top song of the selected measure, so it rescales when you switch. Songs with no streams on that measure land in the first bin; their count is called out above.</div>
+    </div>
     <div class="panel">
       <h2>Top artists all-time</h2>
       <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>

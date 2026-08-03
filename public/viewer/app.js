@@ -741,6 +741,8 @@ function renderAllTime(){
     <div class="kpi"><div class="lbl">Songs with data</div><div class="val">${list.length}</div><div class="note">of ${model.tracks.size} songs in catalog</div></div>
     <div class="kpi"><div class="lbl">Artists</div><div class="val">${Object.keys(artists).length}</div><div class="note">years tracked: ${model.yearList.join(', ')}</div></div>`;
 
+  // ── Phân bố stream theo bài (chọn On-chart / All-time) ──
+  renderAllTimeDist(list);
   // ── Breakdown ở cuối trang: genre streams / artist theo genre / artist theo gender ──
   renderAllTimeBreakdown(list, grand);
 
@@ -793,6 +795,48 @@ function renderAllTime(){
      onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
   hydrateThumbs();
 }
+/* ───────── All-time · Phân bố stream ─────────
+   Histogram: mỗi cột = số BÀI trong 1 bin rộng 100.000.000 stream, bin i = [i·100M, (i+1)·100M).
+   Số bin chạy tới bài cao nhất của chế độ đang chọn. */
+const AT_DIST_BIN=1e8;
+const AT_DIST_MODES={ on:{ label:'On-chart', key:t=>t.trackedTotal }, all:{ label:'All-time', key:t=>t.allTotal } };
+let atDistMode='all', atDistList=null;
+window.setAtDist=function(m){ if(!AT_DIST_MODES[m]) return; atDistMode=m; drawAtDist(); };
+
+function renderAllTimeDist(list){ atDistList=list; drawAtDist(); }
+
+function drawAtDist(){
+  if(!atDistList || !$('chartAtDist')) return;
+  const mode=AT_DIST_MODES[atDistMode], key=mode.key;
+  const vals=atDistList.map(key).sort((a,b)=>a-b);
+  const max=vals[vals.length-1]||0;
+  const nBins=Math.max(1, Math.floor(max/AT_DIST_BIN)+1);
+  const counts=new Array(nBins).fill(0);
+  for(const v of vals) counts[Math.min(nBins-1, Math.floor(v/AT_DIST_BIN))]++;
+  const tabs=$('atDistTabs');
+  if(tabs) tabs.innerHTML=Object.entries(AT_DIST_MODES).map(([k,m])=>
+    `<button type="button" class="pill${k===atDistMode?' on':''}" onclick="setAtDist('${k}')">${m.label}</button>`).join('');
+  const sub=$('atDistSub');
+  if(sub){
+    const n=vals.length, med=n?vals[n>>1]:0;
+    let zero=0; while(zero<n && vals[zero]===0) zero++; // vals đã sắp tăng dần
+    sub.textContent=`${n} songs · ${nBins} bins of ${abbr(AT_DIST_BIN)} · median ${abbr(med)} · max ${abbr(max)}${zero?` · ${zero} at zero`:''}`;
+  }
+  const total=vals.length||1;
+  const edge=i=>i*AT_DIST_BIN;
+  drawChart('chartAtDist','bar',{
+    labels: counts.map((_,i)=>abbr(edge(i))),
+    datasets:[{ data: counts, backgroundColor:'#2E2E2E', borderRadius:0 }]
+  },{ plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{
+          title:c=>`${abbr(edge(c[0].dataIndex))} – ${abbr(edge(c[0].dataIndex+1))} streams`,
+          label:c=>`${c.parsed.y} song${c.parsed.y===1?'':'s'} · ${(c.parsed.y/total*100).toFixed(1)}% (${mode.label})` } } },
+      scales:{ y:{ beginAtZero:true, title:{display:true, text:'songs'}, ticks:{precision:0} },
+               x:{ grid:{display:false}, title:{display:true, text:`streams — bin ${abbr(AT_DIST_BIN)}`},
+                   ticks:{ autoSkip:true, maxTicksLimit:16, maxRotation:0 } } },
+      datasets:{ bar:{ categoryPercentage:1, barPercentage:.92 } } });
+}
+
 /* ───────── All-time · Breakdown (gộp 3 bảng vào 1 panel, chọn type để show) ─────────
    type: genre        -> tổng stream + số bài theo thể loại (thanh tỉ lệ, Unknown xếp cuối)
          artistGenre  -> xếp hạng nghệ sĩ TRONG 1 thể loại (filter chọn thể loại)
