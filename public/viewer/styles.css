@@ -149,6 +149,10 @@ nav button:focus-visible{outline:2px solid var(--red); outline-offset:-2px}
 table{width:100%; border-collapse:collapse; font-size:14px}
 th{font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); text-align:left;
   padding:8px 10px; border-bottom:1px solid var(--ink); font-weight:700}
+th.sortable{cursor:pointer; user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable.on{color:var(--ink)}
+th .sar{font-style:normal; font-size:9px; margin-left:5px; letter-spacing:0}
 td{padding:10px; border-bottom:1px solid var(--rule-soft); vertical-align:middle}
 tr:hover td{background:rgba(28,23,16,.04)}
 td.rank{font-family:var(--display); font-weight:400; font-size:26px; width:52px; text-align:center; line-height:1;
