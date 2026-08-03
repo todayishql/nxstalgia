@@ -69,6 +69,10 @@
         <button class="iconbtn" id="wNext" aria-label="Next week">›</button>
       </div>
       <select id="wSelect" aria-label="Select week"></select>
+      <div class="pill-row" id="chartMode" style="margin:0">
+        <button type="button" class="pill on" data-mode="songs" onclick="setChartMode('songs')">Songs</button>
+        <button type="button" class="pill" data-mode="artists" onclick="setChartMode('artists')">Artists</button>
+      </div>
       <button class="btn ghost small" id="pngBtn">⬇ Download PNG</button>
     </div>
     <div class="sheet" id="sheetEl">
@@ -79,11 +83,11 @@
         <div class="sheet-box dates" id="sheetDates">—</div>
       </div>
       <table>
-        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th>Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
+        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th id="colSubject">Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
         <tbody id="chartTable"></tbody>
       </table>
     </div>
-    <div class="hint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
+    <div class="hint" id="chartHint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
   </section>
 
   <!-- ══ PHÂN TÍCH ══ -->

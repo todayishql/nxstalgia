@@ -76,6 +76,7 @@ function buildModel(){
   }
   const yearList=[...years.keys()].sort((a,b)=>a-b);
   model = { tracks, years, yearList };
+  ARTCHART=null; // model dựng lại -> bỏ cache bảng xếp hạng nghệ sĩ
   if(!years.has(currentYear)) currentYear = yearList[yearList.length-1] || SEED_YEAR;
   fillTrackOptions();
 }
@@ -255,6 +256,11 @@ function renderOverview(){
 }
 
 /* ───────── render: chart sheet ───────── */
+const SONG_HINT="TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.";
+const ARTIST_HINT="Artists ranked by their on-chart streams that week — a song credits its full stream count to every artist on it, so a collab feeds both. TW/LW = this week's rank / last week's rank · ● = streams up from last week · Wks = weeks on the artist chart. Click an artist for their profile.";
+let chartMode='songs'; // 'songs' | 'artists' — cùng sheet, cùng week-nav
+window.setChartMode=function(m){ chartMode = m==='artists' ? 'artists' : 'songs'; renderChartView(); };
+
 function renderChartView(){
   const y=currentYear;
   const mw=maxWeekOf(y);
@@ -268,6 +274,11 @@ function renderChartView(){
   $('sheetTitle').innerHTML='THE&nbsp;N<em>['+yy(y)+']</em>stalgia';
   $('sheetWeekNo').textContent=w;
   $('sheetDates').textContent=weekDates(y,w);
+
+  for(const b of document.querySelectorAll('#chartMode .pill')) b.classList.toggle('on', b.dataset.mode===chartMode);
+  $('colSubject').textContent = chartMode==='artists' ? 'Artist' : 'Song';
+  $('chartHint').textContent = chartMode==='artists' ? ARTIST_HINT : SONG_HINT;
+  if(chartMode==='artists'){ renderArtistSheet(y,w); return; }
 
   const rows=weekChart(y,w);
   // Callout kiểu Billboard: Hot Shot Debut = bài NEW hạng cao nhất; Greatest Gainer = vọt hạng mạnh nhất
@@ -314,6 +325,102 @@ function renderChartView(){
   }).join('') : '<tr><td colspan="8"><div class="empty">No data yet for this week — edit data at /admin.</div></td></tr>';
   hydrateThumbs();
 }
+/* ── Bảng xếp hạng NGHỆ SĨ theo tuần ──
+   Gộp on-chart stream của mọi bài trong tuần; mỗi nghệ sĩ trên 1 bài nhận trọn stream của bài đó
+   (khớp cách gộp "Top artists" ở All-time). Dựng 1 lần cho cả catalog rồi cache. */
+let ARTCHART=null;
+function buildArtistChart(){
+  if(ARTCHART) return ARTCHART;
+  const byYear=new Map();      // year -> week -> Map(key -> {key,name,streams,songs})
+  const firstOf=new Map();     // key -> year*100+week lần đầu có stream (phân biệt NEW vs RE)
+  for(const t of model.tracks.values()){
+    for(const [y,wm] of t.years){
+      let ym=byYear.get(y); if(!ym){ ym=new Map(); byYear.set(y,ym); }
+      for(const [w,e] of wm){
+        const s=e.stream||0; if(s<=0) continue;
+        let wk=ym.get(w); if(!wk){ wk=new Map(); ym.set(w,wk); }
+        const yw=y*100+w;
+        for(const a of t.artists){
+          const k=artistKey(a);
+          let r=wk.get(k); if(!r){ r={ key:k, name:a, streams:0, songs:0 }; wk.set(k,r); }
+          r.streams+=s; r.songs++;
+          if(!firstOf.has(k) || yw<firstOf.get(k)) firstOf.set(k,yw);
+        }
+      }
+    }
+  }
+  const out=new Map();
+  for(const [y,ym] of byYear){
+    const weeks=new Map();
+    for(const [w,wk] of ym){
+      const rows=[...wk.values()].sort((a,b)=>b.streams-a.streams || a.name.localeCompare(b.name));
+      const rankOf=new Map(), byKey=new Map();
+      rows.forEach((r,i)=>{ rankOf.set(r.key,i+1); byKey.set(r.key,r); });
+      weeks.set(w,{ rows, rankOf, byKey });
+    }
+    out.set(y,weeks);
+  }
+  ARTCHART={ byYear:out, firstOf };
+  return ARTCHART;
+}
+// peak + số tuần có mặt tính tới tuần w (trong năm y)
+function artistRunUpTo(weeks, key, w){
+  let peak=null, woc=0;
+  for(let i=1;i<=w;i++){
+    const r=weeks.get(i)?.rankOf.get(key);
+    if(r==null) continue;
+    woc++; if(peak==null||r<peak) peak=r;
+  }
+  return { peak, woc };
+}
+
+function renderArtistSheet(y,w){
+  const ac=buildArtistChart();
+  const weeks=ac.byYear.get(y)||new Map();
+  const rows=weeks.get(w)?.rows||[];
+  const prev=weeks.get(w-1)||null;
+
+  // Callout: Hot Shot Debut = nghệ sĩ mới hạng cao nhất; Greatest Gainer = vọt hạng mạnh nhất
+  let hotShot=null, gainer=null, bestNew=Infinity, bestJump=0;
+  rows.forEach((r,i)=>{
+    const pos=i+1, pr=prev?prev.rankOf.get(r.key):null;
+    if(pr==null){ if(ac.firstOf.get(r.key)===y*100+w && pos<bestNew){ bestNew=pos; hotShot=r.key; } }
+    else { const jump=pr-pos; if(jump>bestJump){ bestJump=jump; gainer=r.key; } }
+  });
+
+  $('chartTable').innerHTML = rows.length ? rows.map((r,i)=>{
+    const pos=i+1;
+    const pr=prev?prev.rankOf.get(r.key):null;
+    const prow=prev?prev.byKey.get(r.key):null;
+    let lw='—', mvCls='none', mvTxt='';
+    if(pr!=null){
+      const d=pr-pos; lw=pr;
+      if(d>0){ mvCls='up'; mvTxt='▲'+d; } else if(d<0){ mvCls='down'; mvTxt='▼'+(-d); } else mvCls='eq';
+    } else {
+      lw = ac.firstOf.get(r.key)===y*100+w ? '<span class="lw-new">NEW</span>' : '<span class="lw-re">RE</span>';
+    }
+    let pctTxt='', pctCls='';
+    if(prow && prow.streams>0){
+      const p=Math.round((r.streams-prow.streams)/prow.streams*100);
+      pctTxt = p>999?'>999%':(p>0?'+':'')+p+'%'; pctCls = p>0?' pos':(p<0?' neg':'');
+    }
+    const bullet = prow && prow.streams>0 && r.streams>prow.streams;
+    const run=artistRunUpTo(weeks,r.key,w);
+    const callout = r.key===hotShot ? '<span class="callout hotshot">Hot Shot Debut</span>'
+                  : (r.key===gainer && bestJump>=3) ? '<span class="callout gainer">Greatest Gainer</span>' : '';
+    return `<tr class="clickable" onclick="openArtist('${jsStr(r.name)}')">
+      <td class="rk-tw${pos===1?' no1':''}"><span class="rk-num">${pos}${bullet?'<span class="blt">●</span>':''}</span></td>
+      <td class="rk-lw">${lw}</td>
+      <td class="rk-mv ${mvCls}"><span class="mv-in">${mvTxt}</span></td>
+      <td><div class="songcell"><div class="songmeta"><div class="s-name">${esc(r.name)}${callout}</div><div class="s-artist">${r.songs} song${r.songs>1?'s':''} on chart</div></div></div></td>
+      <td class="pts">${fmt(r.streams)}</td>
+      <td class="pct${pctCls}">${pctTxt}</td>
+      <td class="peakc${run.peak===1?' no1':''}">${run.peak??'—'}</td>
+      <td class="wocc">${run.woc}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8"><div class="empty">No artist data for this week — edit data at /admin.</div></td></tr>';
+}
+
 async function exportPNG(){
   if(typeof html2canvas==='undefined'){ toast('Image rendering library not loaded — open the file in a browser and try again'); return; }
   toast('Rendering image…');
@@ -321,7 +428,7 @@ async function exportPNG(){
     const canvas=await html2canvas($('sheetEl'),{ scale:2, useCORS:true, backgroundColor:'#FAFAFA' });
     const a=document.createElement('a');
     a.href=canvas.toDataURL('image/png');
-    a.download='n'+yy(currentYear)+'stalgia-w'+selectedWeek+'.png';
+    a.download='n'+yy(currentYear)+'stalgia-w'+selectedWeek+(chartMode==='artists'?'-artists':'')+'.png';
     a.click();
     toast('PNG image downloaded');
   }catch(e){ toast('Could not render image (artwork may be blocked by CORS)'); }
