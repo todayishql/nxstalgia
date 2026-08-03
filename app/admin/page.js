@@ -58,6 +58,7 @@ export default function Dashboard() {
           <div className="card"><div className="num">{stats.years.join(', ') || '—'}</div><div className="lbl">Years with data</div></div>
           <div className="card"><div className="num">{stats.artwork.ok}</div><div className="lbl">Has cover art</div></div>
           <div className="card"><div className="num">{stats.genre?.filled ?? 0}</div><div className="lbl">Has genre</div></div>
+          <div className="card"><div className="num">{stats.awards?.won ?? 0}</div><div className="lbl">Awards won ({stats.awards?.nominees ?? 0} nominees)</div></div>
         </div>
       </div>
 

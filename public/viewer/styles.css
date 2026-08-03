@@ -216,6 +216,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--red); outline-of
 .gstat .gbar>i{display:block; height:100%; background:var(--ink)}
 .gstat .gval{font-family:var(--mono); font-size:11.5px; color:var(--muted); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
 @media(max-width:560px){ .gstat{grid-template-columns:1fr auto; gap:4px 10px} .gstat .gbar{grid-column:1/-1; order:3} }
+/* ── Awards: mỗi hạng mục 1 khối, winner nổi bật ─────── */
+.aw-cat{border-top:1px solid var(--rule); padding:14px 0 4px}
+.aw-cat:first-child{border-top:none; padding-top:0}
+.aw-cat-head{font-family:var(--mono); font-size:10.5px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--muted); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:10px}
+.aw-pending{font-family:var(--display); font-size:12px; letter-spacing:0; text-transform:none; color:var(--faint)}
+.aw-row{display:flex; align-items:center; gap:12px; padding:8px 10px; cursor:pointer; border-bottom:1px solid var(--rule-soft)}
+.aw-row:last-child{border-bottom:none}
+.aw-row:hover{background:rgba(28,23,16,.04)}
+.aw-row.win{background:rgba(28,23,16,.05); border-left:3px solid var(--gold); padding-left:9px}
+.aw-mark{width:20px; text-align:center; font-size:14px; color:var(--faint)}
+.aw-row.win .aw-mark{font-size:16px}
+.aw-thumb{display:flex}
+.aw-name{flex:1; min-width:0; font-weight:600; font-size:14.5px}
+.aw-row.win .aw-name{font-weight:700}
+.aw-sub{display:block; font-weight:400; font-size:12.5px; color:var(--ink2)}
+.aw-note{font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap}
+.aw-tag{font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint);
+  border:1px solid var(--rule-soft); padding:1px 7px; white-space:nowrap}
+.aw-row.win .aw-tag{color:var(--ink); border-color:var(--ink)}
+@media(max-width:560px){ .aw-note{display:none} }
 /* tag genre nhỏ trong danh sách bài */
 .gtag{display:inline-block; margin-left:8px; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em;
   text-transform:uppercase; color:var(--faint); border:1px solid var(--rule-soft); padding:1px 6px; vertical-align:1px}

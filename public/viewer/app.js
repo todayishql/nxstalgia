@@ -1,6 +1,6 @@
 /* ───────── state ───────── */
 // Dữ liệu lấy từ backend MongoDB qua /api/bootstrap (không còn SEED/localStorage)
-let DATA = { settings:{}, tracks:[], entries:[], artists:[] };
+let DATA = { settings:{}, tracks:[], entries:[], artists:[], awards:[] };
 let ARTMETA = new Map(); // artistKey -> { gender, region, genres }
 let SEED_YEAR = 2026;
 let model = null;
@@ -29,6 +29,7 @@ async function loadData(){
   DATA.tracks = DATA.tracks || [];
   DATA.entries = DATA.entries || [];
   DATA.artists = DATA.artists || [];
+  DATA.awards = DATA.awards || [];
   ARTMETA = new Map(DATA.artists.map(a => [a.key, { gender:a.gender||'', region:a.region||'', genres:a.genres||[] }]));
   SEED_YEAR = DATA.settings.currentYear || DATA.entries[0]?.year || 2026;
   currentYear = SEED_YEAR;
@@ -993,6 +994,110 @@ function drawAtBreakdown(){
     </table>`;
   }
 }
+/* ───────── Awards ─────────
+   Mỗi bản ghi = 1 đề cử (won=true -> thắng) trong 1 hạng mục của 1 năm.
+   subject: type='track' -> trackId (tên tra từ model), type='artist' -> artistKey (tên dùng name đã lưu). */
+let awYear=null;
+window.setAwYear=function(y){ awYear=+y; renderAwards(); };
+
+function awardSubject(a){
+  if(a.type==='track'){
+    const t=model.tracks.get(a.subject);
+    return { label:t?t.name:(a.name||a.subject), sub:t?t.artist:'', track:t||null, gone:!t };
+  }
+  return { label:a.name||a.subject, sub:'Artist', track:null, gone:false };
+}
+// mở bài hát / nghệ sĩ tương ứng khi bấm 1 dòng award
+window.openAward=function(type, subject, name){
+  if(type==='track'){ if(model.tracks.has(subject)) openTrack(subject); else toast('This song is no longer in the catalog'); return; }
+  openArtist(name);
+};
+
+function renderAwards(){
+  const all=DATA.awards||[];
+  const years=[...new Set(all.map(a=>+a.year))].sort((a,b)=>b-a);
+  if(!years.length){
+    $('awKpis').innerHTML='';
+    $('awYears').innerHTML='';
+    $('awSub').textContent='';
+    $('awList').innerHTML='<div class="empty">No awards recorded yet — add them in <strong>/admin/awards</strong>.</div>';
+    $('awHonoursPanel').style.display='none';
+    return;
+  }
+  $('awHonoursPanel').style.display='';
+  if(awYear==null || !years.includes(awYear)) awYear = years.includes(currentYear) ? currentYear : years[0];
+
+  const ofYear=all.filter(a=>+a.year===awYear);
+  const cats=new Map();
+  for(const a of ofYear){ if(!cats.has(a.category)) cats.set(a.category,[]); cats.get(a.category).push(a); }
+  for(const rows of cats.values()) rows.sort((x,y)=>(y.won?1:0)-(x.won?1:0) || String(x.name).localeCompare(String(y.name)));
+  const ordered=[...cats.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const wins=ofYear.filter(a=>a.won);
+
+  // ── KPI ──
+  const topWinner=(()=>{ const m=new Map();
+    for(const a of wins){ const k=a.type+':'+a.subject; m.set(k,(m.get(k)||0)+1); }
+    let best=null; for(const [k,n] of m) if(!best||n>best.n) best={k,n};
+    if(!best) return null;
+    const a=wins.find(x=>x.type+':'+x.subject===best.k);
+    return { name:awardSubject(a).label, n:best.n };
+  })();
+  $('awKpis').innerHTML=`
+    <div class="kpi"><div class="lbl">Categories in ${awYear}</div><div class="val">${ordered.length}</div><div class="note">${ofYear.length} nomination${ofYear.length===1?'':'s'} total</div></div>
+    <div class="kpi"><div class="lbl">Titles awarded</div><div class="val">${wins.length}</div><div class="note">${ordered.length-wins.length} still undecided</div></div>
+    <div class="kpi"><div class="lbl">Most titles in ${awYear}</div><div class="val" style="font-size:17px;font-family:var(--display)">${topWinner?esc(topWinner.name):'—'}</div><div class="note">${topWinner?topWinner.n+' win'+(topWinner.n===1?'':'s'):''}</div></div>
+    <div class="kpi"><div class="lbl">Years on record</div><div class="val">${years.length}</div><div class="note">${years.join(', ')}</div></div>`;
+
+  $('awYears').innerHTML=years.map(y=>`<button type="button" class="pill${y===awYear?' on':''}" onclick="setAwYear(${y})">${y}</button>`).join('');
+  $('awSub').textContent=`${ordered.length} categor${ordered.length===1?'y':'ies'} · ${wins.length} winner${wins.length===1?'':'s'}`;
+
+  $('awList').innerHTML = ordered.map(([cat,rows])=>{
+    const body=rows.map(a=>{
+      const s=awardSubject(a);
+      const cls=a.won?'aw-row win':'aw-row';
+      return `<div class="${cls}" onclick="openAward('${a.type}','${jsStr(a.subject)}','${jsStr(s.label)}')">
+        <span class="aw-mark">${a.won?'🏆':'·'}</span>
+        ${a.type==='track'&&s.track?`<span class="aw-thumb">${thumbHTML(s.track)}</span>`:''}
+        <span class="aw-name">${esc(s.label)}${s.gone?'<span class="gtag">removed</span>':''}
+          ${s.sub?`<span class="aw-sub">${esc(s.sub)}</span>`:''}</span>
+        ${a.note?`<span class="aw-note">${esc(a.note)}</span>`:''}
+        <span class="aw-tag">${a.won?'winner':'nominee'}</span>
+      </div>`;
+    }).join('');
+    return `<div class="aw-cat">
+      <div class="aw-cat-head">${esc(cat)}${rows.some(r=>r.won)?'':'<span class="aw-pending">no winner yet</span>'}</div>
+      ${body}
+    </div>`;
+  }).join('');
+
+  renderAwardHonours(all);
+  hydrateThumbs();
+}
+
+// Bảng "most decorated" trên TẤT CẢ các năm: đếm win + tổng đề cử cho mỗi đối tượng.
+function renderAwardHonours(all){
+  const box=$('awHonours'); if(!box) return;
+  const m=new Map(); // type:subject -> { label, sub, type, subject, wins, noms, years:Set }
+  for(const a of all){
+    const k=a.type+':'+a.subject;
+    let e=m.get(k);
+    if(!e){ const s=awardSubject(a); e={ label:s.label, sub:s.sub, type:a.type, subject:a.subject, wins:0, noms:0, years:new Set() }; m.set(k,e); }
+    e.noms++; if(a.won) e.wins++; e.years.add(+a.year);
+  }
+  const rows=[...m.values()].sort((x,y)=>y.wins-x.wins || y.noms-x.noms || x.label.localeCompare(y.label)).slice(0,15);
+  const sub=$('awHonoursSub');
+  if(sub) sub.textContent=`${m.size} song${m.size===1?'':'s'} & artists nominated`;
+  box.innerHTML=`<table>
+    <thead><tr><th style="text-align:center">#</th><th>Song / artist</th><th>Years</th><th style="text-align:right">Wins</th><th style="text-align:right">Noms</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr class="clickable" onclick="openAward('${r.type}','${jsStr(r.subject)}','${jsStr(r.label)}')">
+      <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
+      <td><div class="t-name">${esc(r.label)}</div>${r.sub?`<div class="t-artist">${esc(r.sub)}</div>`:''}</td>
+      <td class="muted" style="font-family:var(--mono);font-size:11.5px">${[...r.years].sort((a,b)=>a-b).join(', ')}</td>
+      <td class="num" style="color:var(--gold);font-weight:700">${r.wins}</td>
+      <td class="num">${r.noms}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
 /* ───────── tiện ích danh mục (gợi ý cho ô So sánh 1-vs-1) ───────── */
 function fillTrackOptions(){
   const dl=$('trackOptions'); if(!dl) return;
@@ -1073,6 +1178,7 @@ function switchView(v){
   if(v==='chart') renderChartView();
   if(v==='analytics') renderAnalytics();
   if(v==='alltime') renderAllTime();
+  if(v==='awards') renderAwards();
   if(v==='tracks') renderTrackList();
 }
 function refreshAll(){
@@ -1081,6 +1187,7 @@ function refreshAll(){
   if(active==='chart') renderChartView();
   if(active==='analytics') renderAnalytics();
   if(active==='alltime') renderAllTime();
+  if(active==='awards') renderAwards();
   if(active==='tracks') renderTrackList();
 }
 
