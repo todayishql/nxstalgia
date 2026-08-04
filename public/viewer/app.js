@@ -819,16 +819,15 @@ window.openArtist = function(name){
 }
 
 /* ───────── All-time ───────── */
-let atPage=0, atQuery=''; // phân trang Hall of Fame (100/trang)
+const AT_SIZE=100;       // Hall of Fame chốt ở top 100 all-time
 // Sort Hall of Fame theo 1 trong 3 cột stream (mặc định All-time ↓); bấm lại cột đang sort -> đổi chiều.
 let atSort='all', atSortDir='desc';
 const AT_SORT_KEY={ pre:t=>t.baseline, on:t=>t.trackedTotal, all:t=>t.allTotal };
-window.atGoPage=function(d){ atPage+=d; renderAllTime(); };
 window.setAtSort=function(k){
   if(!AT_SORT_KEY[k]) return;
   if(atSort===k) atSortDir = atSortDir==='desc' ? 'asc' : 'desc';
   else { atSort=k; atSortDir='desc'; }
-  atPage=0; renderAllTime();
+  renderAllTime();
 };
 // competition rank trên mảng ĐÃ sắp theo key (giá trị bằng nhau -> cùng hạng)
 function rankMap(arr, key){
@@ -854,12 +853,14 @@ function renderAllTime(){
   // ── Breakdown ở cuối trang: genre streams / artist theo genre / artist theo gender ──
   renderAllTimeBreakdown(list, grand);
 
-  // ── sắp xếp theo cột stream đang chọn; hạng "#" là hạng TOÀN CỤC của cột đó (giữ đúng khi lọc/phân trang) ──
-  const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
-  const sorted=[...list].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
-  const rankOf=rankMap(sorted, key);
+  // ── hạng gốc = bảng xếp hạng pre-chart, hạng hiện tại = all-time; cả hai tính trên TOÀN BỘ catalog ──
   const allRankOf=rankMap(list, AT_SORT_KEY.all);                                  // list đã sắp all-time ↓
   const preRankOf=rankMap([...list].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
+  // Hall of Fame chỉ gồm 100 bài all-time cao nhất; sort các cột chỉ đảo thứ tự trong đúng 100 bài này.
+  const roster=list.slice(0, AT_SIZE);
+  const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
+  const sorted=[...roster].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
+  const rankOf=rankMap(sorted, key);
   for(const [k,id] of [['pre','atThPre'],['on','atThOn'],['all','atThAll']]){
     const th=$(id); if(!th) continue;
     th.classList.toggle('on', atSort===k);
@@ -867,18 +868,19 @@ function renderAllTime(){
   }
 
   const q=($('atSearch').value||'').trim().toLowerCase();
-  if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
-  const filtered = q ? sorted.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : sorted;
-  const size=100, total=filtered.length, pages=Math.max(1,Math.ceil(total/size));
-  if(atPage>=pages) atPage=pages-1; if(atPage<0) atPage=0;
-  const shown=filtered.slice(atPage*size, atPage*size+size);
+  const shown = q ? sorted.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : sorted;
   $('atTable').innerHTML = shown.map((t)=>{
     // cột đang sort không có số liệu (vd bài chưa có pre-chart) -> "—" thay vì cả dải cùng hạng
     const pos=key(t)>0 ? rankOf.get(t.id) : null;
     const allPos=allRankOf.get(t.id);
-    // "+/-" luôn là dịch chuyển pre-chart -> all-time (thuộc tính của bài, không đổi theo cột đang sort)
-    const delta=(preRankOf.get(t.id)||allPos)-allPos;
-    const mv = delta>0 ? `<span class="mv up">▲${delta}</span>` : delta<0 ? `<span class="mv down">▼${-delta}</span>` : '';
+    const prePos=t.baseline>0 ? preRankOf.get(t.id) : null;
+    // "+/-" = dịch chuyển hạng pre-chart -> hạng all-time; ngoài top 100 pre-chart mà lọt vào đây -> NEW
+    const isNew = prePos==null || prePos>AT_SIZE;
+    const delta = isNew ? 0 : prePos-allPos;
+    const mv = isNew ? '<span class="mv new">NEW</span>'
+      : delta>0 ? `<span class="mv up">▲${delta}</span>`
+      : delta<0 ? `<span class="mv down">▼${-delta}</span>`
+      : '<span class="mv eq">=</span>';
     return `<tr>
       <td class="rank r${pos&&pos<=3?pos:''}" style="text-align:center">${pos ?? '<span style="font-size:15px;color:var(--faint)">—</span>'}</td>
       <td style="text-align:center">${mv}</td>
@@ -890,10 +892,7 @@ function renderAllTime(){
     </tr>`;
   }).join('') || '<tr><td colspan="7"><div class="empty">No songs found.</div></td></tr>';
   const pg=$('atPager');
-  if(pg) pg.innerHTML = total>size ? `
-    <button class="pg" onclick="atGoPage(-1)" ${atPage<=0?'disabled':''}>‹</button>
-    <span>${atPage*size+1}–${Math.min(total,atPage*size+size)} of ${total}</span>
-    <button class="pg" onclick="atGoPage(1)" ${atPage>=pages-1?'disabled':''}>›</button>` : '';
+  if(pg) pg.innerHTML = q ? `<span>${shown.length} of ${roster.length} songs match</span>` : '';
 
   const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
   drawChart('chartAtArtists','bar',{
