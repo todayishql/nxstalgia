@@ -77,6 +77,7 @@ async function loadData(){
   DATA.artists = DATA.artists || [];
   DATA.awards = DATA.awards || [];
   ARTMETA = new Map(DATA.artists.map(a => [a.key, { gender:a.gender||'', region:a.region||'', genres:a.genres||[] }]));
+  REGION_CACHE.clear(); // metadata nghệ sĩ đổi -> vùng của bài phải tính lại
   SEED_YEAR = DATA.settings.currentYear || DATA.entries[0]?.year || 2026;
   currentYear = SEED_YEAR;
 }
@@ -898,6 +899,37 @@ window.openArtist = function(name){
 const AT_SIZE=100;       // Hall of Fame chốt ở top 100 all-time
 // Sort Hall of Fame theo 1 trong 3 cột stream (mặc định All-time ↓); bấm lại cột đang sort -> đổi chiều.
 let atSort='all', atSortDir='desc';
+
+/* ── Lọc Hall of Fame theo vùng của NGHỆ SĨ (Artist.region, tag ở /admin/artists) ──
+   Bài feat nhiều nghệ sĩ khác vùng -> thuộc TẤT CẢ các vùng đó (khớp cách credit stream
+   cho từng nghệ sĩ ở "Top artists"). Không nghệ sĩ nào có region -> 'none' (Untagged). */
+const AT_REGIONS=[{ v:'ASIA', label:'Asia' },{ v:'US-UK', label:'US-UK' },{ v:'OTHER', label:'Other' },{ v:'none', label:'Untagged' }];
+const AT_REGION_LABEL=Object.fromEntries(AT_REGIONS.map(r=>[r.v,r.label]));
+let atRegion='';                       // '' = tất cả các vùng
+const REGION_CACHE=new Map();          // trackId -> Set(region)
+function trackRegions(t){
+  let s=REGION_CACHE.get(t.id);
+  if(s) return s;
+  s=new Set();
+  for(const a of t.artists){ const r=ARTMETA.get(artistKey(a))?.region; if(r) s.add(r); }
+  if(!s.size) s.add('none');
+  REGION_CACHE.set(t.id,s);
+  return s;
+}
+window.setAtRegion=function(v){ atRegion=v||''; renderAllTime(); };
+
+// Vẽ hàng pill vùng + trả về số bài mỗi vùng; vùng đang chọn mà rỗng thì tự về "All".
+function renderAtRegions(list){
+  const n={};
+  for(const t of list) for(const r of trackRegions(t)) n[r]=(n[r]||0)+1;
+  if(atRegion && !n[atRegion]) atRegion='';
+  const box=$('atRegions');
+  if(box){
+    const pill=(v,label,disabled)=>`<button type="button" class="pill${atRegion===v?' on':''}"${disabled?' disabled':''} onclick="setAtRegion('${v}')">${label}</button>`;
+    box.innerHTML = pill('', `All · ${list.length}`) + AT_REGIONS.map(r=>pill(r.v, `${r.label} · ${n[r.v]||0}`, !n[r.v])).join('');
+  }
+  return n;
+}
 const AT_SORT_KEY={ pre:t=>t.baseline, on:t=>t.trackedTotal, all:t=>t.allTotal };
 window.setAtSort=function(k){
   if(!AT_SORT_KEY[k]) return;
@@ -929,11 +961,14 @@ function renderAllTime(){
   // ── Breakdown ở cuối trang: genre streams / artist theo genre / artist theo gender ──
   renderAllTimeBreakdown(list, grand);
 
-  // ── hạng gốc = bảng xếp hạng pre-chart, hạng hiện tại = all-time; cả hai tính trên TOÀN BỘ catalog ──
-  const allRankOf=rankMap(list, AT_SORT_KEY.all);                                  // list đã sắp all-time ↓
-  const preRankOf=rankMap([...list].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
+  // ── Hall of Fame: lọc theo vùng trước, mọi thứ bên dưới tính TRONG vùng đang chọn ──
+  renderAtRegions(list);
+  const pool = atRegion ? list.filter(t=>trackRegions(t).has(atRegion)) : list; // vẫn giữ thứ tự all-time ↓
+  // ── hạng gốc = bảng xếp hạng pre-chart, hạng hiện tại = all-time; cả hai tính trên toàn bộ pool ──
+  const allRankOf=rankMap(pool, AT_SORT_KEY.all);                                  // pool đã sắp all-time ↓
+  const preRankOf=rankMap([...pool].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
   // Hall of Fame chỉ gồm 100 bài all-time cao nhất; sort các cột chỉ đảo thứ tự trong đúng 100 bài này.
-  const roster=list.slice(0, AT_SIZE);
+  const roster=pool.slice(0, AT_SIZE);
   const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
   const sorted=[...roster].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
   const rankOf=rankMap(sorted, key);
@@ -968,7 +1003,11 @@ function renderAllTime(){
     </tr>`;
   }).join('') || '<tr><td colspan="7"><div class="empty">No songs found.</div></td></tr>';
   const pg=$('atPager');
-  if(pg) pg.innerHTML = q ? `<span>${shown.length} of ${roster.length} songs match</span>` : '';
+  if(pg){
+    const scope = atRegion ? ` · ${AT_REGION_LABEL[atRegion]} only (${pool.length} song${pool.length===1?'':'s'} with data)` : '';
+    pg.innerHTML = q ? `<span>${shown.length} of ${roster.length} songs match${scope}</span>`
+                     : scope ? `<span>Top ${roster.length}${scope}</span>` : '';
+  }
 
   const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const ta=TH();

@@ -216,6 +216,7 @@
         <h2 style="margin:0">Hall of Fame</h2>
         <input type="text" id="atSearch" placeholder="Search titles or artists…" style="max-width:260px">
       </div>
+      <div class="pill-row" id="atRegions" style="margin:14px 0 0"></div>
       <table style="margin-top:16px">
         <thead><tr><th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th><th>Song</th>
           <th id="atThPre" class="sortable" style="text-align:right" onclick="setAtSort('pre')">Pre-chart<i class="sar"></i></th>
@@ -224,7 +225,7 @@
         <tbody id="atTable"></tbody>
       </table>
       <div id="atPager" class="race-pager"></div>
-      <div class="hint">The Hall of Fame is the <strong>top 100 songs all-time</strong>. Click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to re-sort those 100 (click again to flip direction) — "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from the pre-chart ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort; <strong>NEW</strong> = the song sat outside the pre-chart top 100 and only reached the Hall of Fame thanks to its on-chart streams.</div>
+      <div class="hint">The <strong>region</strong> pills re-run the whole ranking inside one region, so you get the <strong>top 100 of that region</strong> — ranks, "+/-" and the 100-song cut are all recomputed against that region alone. A song's region comes from its <strong>artists</strong> (tagged in /admin/artists); a collaboration across regions counts in each of them, and "Untagged" collects songs whose artists have no region yet. The Hall of Fame is the <strong>top 100 songs all-time</strong>. Click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to re-sort those 100 (click again to flip direction) — "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from the pre-chart ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort; <strong>NEW</strong> = the song sat outside the pre-chart top 100 and only reached the Hall of Fame thanks to its on-chart streams.</div>
     </div>
     <div class="grid2">
       <div class="panel" id="atDistPanel">
