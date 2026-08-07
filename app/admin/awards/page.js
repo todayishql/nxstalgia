@@ -4,10 +4,15 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from '../api';
 import { AWARD_CATEGORIES, AWARD_TYPES, categoryType } from '@/lib/awards';
 
+const YEAR_MIN = 1900;
+const YEAR_MAX = 2999;
+const validYear = (n) => Number.isInteger(n) && n >= YEAR_MIN && n <= YEAR_MAX;
+
 export default function AwardsPage() {
   const [items, setItems] = useState([]);
   const [years, setYears] = useState([]);
   const [year, setYear] = useState(null); // null = đang chờ năm mặc định
+  const [yearInput, setYearInput] = useState(''); // chuỗi đang gõ trong ô năm
   const [tracks, setTracks] = useState([]);
   const [artists, setArtists] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -31,7 +36,9 @@ export default function AwardsPage() {
           api('/api/admin/tracks?all=1'),
           api('/api/admin/artists?limit=500'),
         ]);
-        setYear((y) => y ?? (s.settings?.currentYear || new Date().getFullYear()));
+        const def = s.settings?.currentYear || new Date().getFullYear();
+        setYear((y) => y ?? def);
+        setYearInput((v) => v || String(def));
         setTracks(t.items || []);
         setArtists(a.items || []);
       } catch (e) { flash('err', e.message); }
@@ -68,6 +75,19 @@ export default function AwardsPage() {
 
   const trackLabel = (t) => `${t.name} — ${t.artist}`;
 
+  // Ô năm nhập tự do: chỉ đổi năm đang xem khi gõ đủ một năm hợp lệ.
+  function onYearInput(v) {
+    setYearInput(v);
+    const n = parseInt(v, 10);
+    if (String(v).trim().length === 4 && validYear(n)) setYear(n);
+  }
+  // Rời ô mà đang dở dang -> trả về năm đang xem.
+  function onYearBlur() {
+    const n = parseInt(yearInput, 10);
+    if (validYear(n)) { setYear(n); setYearInput(String(n)); }
+    else setYearInput(year == null ? '' : String(year));
+  }
+
   function onCategory(v) {
     setCategory(v);
     const guess = categoryType(v);   // hạng mục đã biết -> tự chọn đúng loại đối tượng
@@ -76,10 +96,12 @@ export default function AwardsPage() {
 
   async function add(e) {
     e?.preventDefault();
-    if (!category.trim()) return flash('err', 'Pick a category first.');
+    const y = parseInt(yearInput, 10);
+    if (!validYear(y)) return flash('err', `Enter a year between ${YEAR_MIN} and ${YEAR_MAX}.`);
+    if (!category.trim()) return flash('err', 'Type an award name first.');
     if (!subject.trim()) return flash('err', type === 'track' ? 'Pick a song.' : 'Type an artist name.');
 
-    let body = { year, category: category.trim(), type, won, note };
+    let body = { year: y, category: category.trim(), type, won, note };
     if (type === 'track') {
       const t = tracks.find((x) => trackLabel(x) === subject.trim()) ||
                 tracks.find((x) => x.name.toLowerCase() === subject.trim().toLowerCase());
@@ -95,7 +117,7 @@ export default function AwardsPage() {
       const r = await api('/api/admin/awards', { method: 'POST', body });
       flash('ok', `${r.award.won ? '🏆 Winner' : 'Nominee'} added: ${r.award.name} — ${r.award.category} ${r.award.year}`);
       setSubject(''); setWon(false); setNote('');
-      load();
+      if (y !== year) setYear(y); else load(); // đổi năm -> load() tự chạy lại qua effect
     } catch (e) { flash('err', e.message); }
     finally { setBusy(false); }
   }
@@ -148,19 +170,27 @@ export default function AwardsPage() {
               winner automatically demotes the previous one. Shows up on the viewer’s <strong>Awards</strong> tab.
             </span>
           </div>
-          <div className="row" style={{ gap: 8 }}>
-            <select value={year} onChange={(e) => setYear(+e.target.value)}>
-              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="muted" style={{ fontSize: 11 }}>Year</span>
+            <input type="number" list="awardYears" min={YEAR_MIN} max={YEAR_MAX} step={1}
+              value={yearInput}
+              onChange={(e) => onYearInput(e.target.value)}
+              onBlur={onYearBlur}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onYearBlur(); } }}
+              placeholder="2026" style={{ width: 110 }} />
+            <datalist id="awardYears">
+              {yearOptions.map((y) => <option key={y} value={y} />)}
+            </datalist>
+          </label>
         </div>
 
         {msg && <div className={`msg ${msg.type}`}>{msg.text}</div>}
 
         <form onSubmit={add} className="row" style={{ gap: 8, marginTop: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 220px' }}>
-            <span className="muted" style={{ fontSize: 11 }}>Category</span>
-            <input list="awardCategories" value={category} onChange={(e) => onCategory(e.target.value)} placeholder="Song of the Year" />
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 240px' }}>
+            <span className="muted" style={{ fontSize: 11 }}>Award name — type anything</span>
+            <input list="awardCategories" value={category} onChange={(e) => onCategory(e.target.value)}
+              placeholder="Song of the Year" autoComplete="off" />
             <datalist id="awardCategories">
               {categoryOptions.map((c) => <option key={c} value={c} />)}
             </datalist>
@@ -191,7 +221,9 @@ export default function AwardsPage() {
             <input type="checkbox" checked={won} onChange={(e) => setWon(e.target.checked)} />
             <span style={{ fontSize: 13 }}>🏆 Winner</span>
           </label>
-          <button type="submit" disabled={busy} style={{ marginBottom: 1 }}>{busy ? 'Adding…' : 'Add'}</button>
+          <button type="submit" disabled={busy} style={{ marginBottom: 1 }}>
+            {busy ? 'Adding…' : `Add to ${validYear(parseInt(yearInput, 10)) ? parseInt(yearInput, 10) : '—'}`}
+          </button>
         </form>
       </div>
 
@@ -244,9 +276,10 @@ export default function AwardsPage() {
         ))}
 
         <p className="muted" style={{ fontSize: 12, marginTop: 16 }}>
-          Categories are free text — the box suggests the standard set from <code>lib/awards.js</code> plus anything already used
-          this year, but you can type your own. Picking a known category auto-selects whether it goes to a song or an artist.
-          Songs are linked by id, so renaming a song later keeps the award pointing at it.
+          Year and award name are both free input — type any year ({YEAR_MIN}–{YEAR_MAX}) to jump to it, even one with no awards
+          yet. The award box suggests the standard set from <code>lib/awards.js</code> plus anything already used this year, but
+          you can type your own. Picking a known name auto-selects whether it goes to a song or an artist. Songs are linked by
+          id, so renaming a song later keeps the award pointing at it.
         </p>
       </div>
     </>
