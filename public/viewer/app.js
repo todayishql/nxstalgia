@@ -730,7 +730,7 @@ function renderPrediction(y){
   let html='<div class="bt" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;margin-bottom:10px">PROJECTION FOR WEEK '+(w+1)+'/'+y+'</div>';
   html+='<table><tbody>'+proj.slice(0,10).map(x=>{
     const d=x.cur-x.rank;
-    const mv=d===0?'<span class="mv eq">=</span>':(d>0?'<span class="mv up">▲'+d+'</span>':'<span class="mv down">▼'+(-d)+'</span>');
+    const mv=d===0?'<span class="mv eq">=</span>':(d>0?'<span class="mv up">+'+d+'</span>':'<span class="mv down">-'+(-d)+'</span>');
     let flag='';
     if(x.rank===1&&x.cur!==1) flag='<span class="pred-flag hot">#1 CONTENDER</span>';
     return `<tr class="clickable" onclick="openTrack('${x.t.id}')">
@@ -989,8 +989,8 @@ function renderAllTime(){
     const isNew = prePos==null || prePos>AT_SIZE;
     const delta = isNew ? 0 : prePos-allPos;
     const mv = isNew ? '<span class="mv new">NEW</span>'
-      : delta>0 ? `<span class="mv up">▲${delta}</span>`
-      : delta<0 ? `<span class="mv down">▼${-delta}</span>`
+      : delta>0 ? `<span class="mv up">+${delta}</span>`
+      : delta<0 ? `<span class="mv down">-${-delta}</span>`
       : '<span class="mv eq">=</span>';
     return `<tr>
       <td class="rank r${pos&&pos<=3?pos:''}" style="text-align:center">${pos ?? '<span style="font-size:15px;color:var(--faint)">—</span>'}</td>
