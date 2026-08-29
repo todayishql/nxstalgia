@@ -1041,9 +1041,10 @@ function renderAllTime(){
   // ── hạng gốc = bảng xếp hạng pre-chart, hạng hiện tại = all-time; cả hai tính trên toàn bộ pool ──
   const allRankOf=rankMap(pool, AT_SORT_KEY.all);                                  // pool đã sắp all-time ↓
   const preRankOf=rankMap([...pool].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
-  // Hall of Fame chỉ gồm 100 bài all-time cao nhất; sort các cột chỉ đảo thứ tự trong đúng 100 bài này.
-  const roster=pool.slice(0, AT_SIZE);
+  // Top 100 luôn lấy theo ĐÚNG cột đang sort (không cố định theo all-time) — sort "On-chart" phải lấy
+  // đúng top 100 bài có on-chart stream cao nhất, không phải 100 bài all-time cao nhất rồi sắp lại.
   const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
+  const roster=[...pool].sort((a,b)=>key(b)-key(a) || b.allTotal-a.allTotal).slice(0, AT_SIZE);
   const sorted=[...roster].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
   const rankOf=rankMap(sorted, key);
   for(const [k,id] of [['pre','atThPre'],['on','atThOn'],['all','atThAll']]){
