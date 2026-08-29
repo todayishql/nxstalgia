@@ -9,12 +9,18 @@ const TrackSchema = new mongoose.Schema(
     artist: { type: String, required: true, trim: true }, // hiển thị nguyên văn
     artists: { type: [String], default: [] }, // tách sẵn -> fix ảnh bìa collab + nhóm nghệ sĩ
     baseline: { type: Number, default: 0 }, // stream tích luỹ trước khi lên chart
-    genre: { type: String, default: '', trim: true }, // thể loại; auto-fill từ iTunes khi tra ảnh bìa
+    genre: { type: String, default: '', trim: true }, // thể loại; auto-fill từ iTunes khi tra ảnh bìa, dùng cho biểu đồ phân bố genre ở tab All-time
     artworkUrl: { type: String, default: '' },
     artworkStatus: {
       type: String,
       enum: ['pending', 'ok', 'none'],
       default: 'pending',
+    },
+    region: {
+      // khu vực nghệ sĩ — dùng để lọc Bảng vàng All-time
+      type: String,
+      enum: ['', 'US-UK', 'ASIA'],
+      default: '',
     },
   },
   { timestamps: true, _id: false }
@@ -22,5 +28,6 @@ const TrackSchema = new mongoose.Schema(
 
 TrackSchema.index({ artist: 1 });
 TrackSchema.index({ artworkStatus: 1 });
+TrackSchema.index({ region: 1 });
 
 export default mongoose.models.Track || mongoose.model('Track', TrackSchema);

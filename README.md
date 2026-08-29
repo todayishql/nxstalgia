@@ -77,7 +77,7 @@ docker compose down -v            # dừng + XOÁ dữ liệu mongo
 
 | Collection | Mô tả | Chỉ mục chính |
 |---|---|---|
-| `tracks` | metadata bài hát, `artists[]` (tách collab), `baseline`, `artworkUrl/Status` | `_id` (string), `artist`, `artworkStatus` |
+| `tracks` | metadata bài hát, `artists[]` (tách collab), `baseline`, `artworkUrl/Status`, `genre`, `region` (`US-UK`\|`ASIA`) | `_id` (string), `artist`, `artworkStatus`, `region` |
 | `entries` | 1 doc = 1 track trong 1 tuần: `{year, week, trackId, rank, stream}` | unique `(year,week,trackId)`; `(year,week,rank)`; `(trackId,year,week)` |
 | `settings` | singleton `config`: chartName, currentYear, weeksPerYear | `_id='config'` |
 | `users` | tài khoản admin (bcrypt) | `email` unique |

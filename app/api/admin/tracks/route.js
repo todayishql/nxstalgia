@@ -19,7 +19,7 @@ export const GET = handle(async (req) => {
   const skip = Math.max(parseInt(searchParams.get('skip') || '0', 10) || 0, 0);
 
   // Sort theo field cho phép (map -> field DB). Mặc định name tăng dần.
-  const SORTABLE = { id: '_id', name: 'name', artist: 'artist', baseline: 'baseline', genre: 'genre', status: 'artworkStatus' };
+  const SORTABLE = { id: '_id', name: 'name', artist: 'artist', baseline: 'baseline', genre: 'genre', region: 'region', status: 'artworkStatus' };
   const sortKey = SORTABLE[searchParams.get('sort')] || 'name';
   const dir = searchParams.get('dir') === 'desc' ? -1 : 1;
 
@@ -37,7 +37,7 @@ export const POST = handle(async (req) => {
   await requireAuth();
   await dbConnect();
   const body = await req.json();
-  const { aid, name, artist, baseline, artworkUrl, genre } = body;
+  const { aid, name, artist, baseline, artworkUrl, genre, region } = body;
   if (!name || !artist) return json({ error: 'name and artist are required' }, 400);
 
   const existing = await Track.find({}, { name: 1, artist: 1 }).lean();
@@ -55,6 +55,7 @@ export const POST = handle(async (req) => {
     artists: Array.isArray(body.artists) && body.artists.length ? body.artists : splitArtists(artist),
     baseline: Number(baseline) || 0,
     genre: String(genre || '').trim(),
+    region: ['US-UK', 'ASIA'].includes(region) ? region : '',
     artworkUrl: artworkUrl || '',
     artworkStatus: artworkUrl ? 'ok' : 'pending',
   });
