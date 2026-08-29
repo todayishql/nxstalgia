@@ -31,12 +31,8 @@ export const PUT = handle(async (req, ctx) => {
   }
   if (body.aid != null) update.aid = body.aid;
   if (body.baseline != null) update.baseline = Number(body.baseline) || 0;
-<<<<<<< HEAD
   if (body.genre != null) update.genre = String(body.genre).trim();
-=======
-  if (body.genre != null) update.genre = body.genre;
   if (body.region != null) update.region = ['US-UK', 'ASIA'].includes(body.region) ? body.region : '';
->>>>>>> 66bf399 (fix all-time chart)
   if (body.artworkUrl != null) {
     update.artworkUrl = body.artworkUrl;
     update.artworkStatus = body.artworkUrl ? 'ok' : 'none';

@@ -9,14 +9,13 @@ const TrackSchema = new mongoose.Schema(
     artist: { type: String, required: true, trim: true }, // hiển thị nguyên văn
     artists: { type: [String], default: [] }, // tách sẵn -> fix ảnh bìa collab + nhóm nghệ sĩ
     baseline: { type: Number, default: 0 }, // stream tích luỹ trước khi lên chart
-    genre: { type: String, default: '', trim: true }, // thể loại; auto-fill từ iTunes khi tra ảnh bìa
+    genre: { type: String, default: '', trim: true }, // thể loại; auto-fill từ iTunes khi tra ảnh bìa, dùng cho biểu đồ phân bố genre ở tab All-time
     artworkUrl: { type: String, default: '' },
     artworkStatus: {
       type: String,
       enum: ['pending', 'ok', 'none'],
       default: 'pending',
     },
-    genre: { type: String, default: '', trim: true }, // thể loại — dùng cho biểu đồ phân bố genre ở tab All-time
     region: {
       // khu vực nghệ sĩ — dùng để lọc Bảng vàng All-time
       type: String,

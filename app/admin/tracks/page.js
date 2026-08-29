@@ -6,8 +6,7 @@ import { groupInt, onlyDigits } from '../format';
 import { parseCsv, toCsv } from '../csv';
 import { GENRES } from '@/lib/genres';
 
-<<<<<<< HEAD
-const EMPTY = { name: '', artist: '', baseline: '', genre: '', artworkUrl: '' };
+const EMPTY = { name: '', artist: '', baseline: '', genre: '', artworkUrl: '', region: '' };
 
 // Bỏ cặp nháy kép bao quanh 1 ô (cho trường hợp dán tab-separated từ Sheets/Excel).
 const unquote = (s) => String(s ?? '').trim().replace(/^"(.*)"$/s, '$1').trim();
@@ -25,9 +24,6 @@ function parsePastedRows(text) {
     .map((r) => ({ name: r[0] || '', artist: r[1] || '', baseline: onlyDigits(r[2] || ''), genre: (r[3] || '').trim() }))
     .filter((r) => r.name && r.artist);
 }
-=======
-const EMPTY = { id: '', name: '', artist: '', aid: '', baseline: 0, genre: '', region: '' };
->>>>>>> 66bf399 (fix all-time chart)
 
 export default function TracksPage() {
   const [items, setItems] = useState([]);
@@ -90,7 +86,7 @@ export default function TracksPage() {
     try {
       const r = await api('/api/admin/tracks', {
         method: 'POST',
-        body: { name: form.name, artist: form.artist, baseline: form.baseline, genre: form.genre, artworkUrl: form.artworkUrl },
+        body: { name: form.name, artist: form.artist, baseline: form.baseline, genre: form.genre, artworkUrl: form.artworkUrl, region: form.region },
       });
       setForm(EMPTY); flash('ok', `Added song: ${r.track.name} (${r.track.id})`); load();
     } catch (err) { flash('err', err.message); }
@@ -288,23 +284,19 @@ export default function TracksPage() {
               <input list="genre-suggestions" value={form.genre} placeholder="auto from iTunes if blank"
                 onChange={(e) => setForm({ ...form, genre: e.target.value })} />
             </div>
+            <div style={{ flex: '0 0 130px' }}>
+              <label>Region</label>
+              <select value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}>
+                <option value="">— Unassigned —</option>
+                <option value="US-UK">US-UK</option>
+                <option value="ASIA">ASIA</option>
+              </select>
+            </div>
           </div>
           <div className="row" style={{ marginTop: 12 }}>
             <div style={{ flex: 1 }}>
               <label>Cover art URL (optional)</label>
               <input value={form.artworkUrl} onChange={(e) => setForm({ ...form, artworkUrl: e.target.value })} placeholder="https://..." />
-            </div>
-            <div style={{ flex: '0 0 140px' }}>
-              <label>Thể loại</label>
-              <input value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} placeholder="Pop, R&B…" />
-            </div>
-            <div style={{ flex: '0 0 130px' }}>
-              <label>Khu vực</label>
-              <select value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })}>
-                <option value="">— Chưa gán —</option>
-                <option value="US-UK">US-UK</option>
-                <option value="ASIA">ASIA</option>
-              </select>
             </div>
           </div>
           <div className="row" style={{ marginTop: 14 }}>
@@ -362,7 +354,6 @@ export default function TracksPage() {
         <table>
           <thead>
             <tr>
-<<<<<<< HEAD
               <th style={{ width: 28 }}><input type="checkbox" checked={allOn} onChange={toggleAll} aria-label="Select all" /></th>
               <th>Image</th>
               <th className="sortable" onClick={() => sortBy('id')}>ID{arrow('id')}</th>
@@ -370,11 +361,9 @@ export default function TracksPage() {
               <th className="sortable" onClick={() => sortBy('artist')}>Artist{arrow('artist')}</th>
               <th className="sortable" onClick={() => sortBy('baseline')}>Baseline{arrow('baseline')}</th>
               <th className="sortable" onClick={() => sortBy('genre')}>Genre{arrow('genre')}</th>
+              <th className="sortable" onClick={() => sortBy('region')}>Region{arrow('region')}</th>
               <th className="sortable" onClick={() => sortBy('status')}>Cover art{arrow('status')}</th>
               <th></th>
-=======
-              <th>Ảnh</th><th>ID</th><th>Tên</th><th>Nghệ sĩ</th><th>Baseline</th><th>Thể loại</th><th>Khu vực</th><th>Ảnh bìa</th><th></th>
->>>>>>> 66bf399 (fix all-time chart)
             </tr>
           </thead>
           <tbody>
@@ -392,22 +381,16 @@ export default function TracksPage() {
                   <>
                     <td><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
                     <td><input value={edit.artist} onChange={(e) => setEdit({ ...edit, artist: e.target.value })} /></td>
-<<<<<<< HEAD
                     <td><input inputMode="numeric" value={groupInt(edit.baseline)} onChange={(e) => setEdit({ ...edit, baseline: onlyDigits(e.target.value) })} /></td>
                     <td><input list="genre-suggestions" value={edit.genre} placeholder="Genre" onChange={(e) => setEdit({ ...edit, genre: e.target.value })} /></td>
-                    <td><input value={edit.artworkUrl} placeholder="Cover art URL" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
-=======
-                    <td><input type="number" value={edit.baseline} onChange={(e) => setEdit({ ...edit, baseline: e.target.value })} /></td>
-                    <td><input value={edit.genre} onChange={(e) => setEdit({ ...edit, genre: e.target.value })} placeholder="Pop, R&B…" /></td>
                     <td>
                       <select value={edit.region} onChange={(e) => setEdit({ ...edit, region: e.target.value })}>
-                        <option value="">— Chưa gán —</option>
+                        <option value="">— Unassigned —</option>
                         <option value="US-UK">US-UK</option>
                         <option value="ASIA">ASIA</option>
                       </select>
                     </td>
-                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
->>>>>>> 66bf399 (fix all-time chart)
+                    <td><input value={edit.artworkUrl} placeholder="Cover art URL" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
                     <td className="row">
                       <button className="sm" onClick={() => saveEdit(t.id)}>Save</button>
                       <button className="ghost sm" onClick={() => setEditing(null)}>Cancel</button>
@@ -417,25 +400,15 @@ export default function TracksPage() {
                   <>
                     <td>{t.name}</td>
                     <td>{t.artist}</td>
-<<<<<<< HEAD
                     <td>{groupInt(t.baseline)}</td>
                     <td>{t.genre ? <span className="pill">{t.genre}</span> : <span className="muted">—</span>}</td>
+                    <td>{t.region ? <span className="pill">{t.region}</span> : <span className="muted">—</span>}</td>
                     <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
                     <td className="row">
-                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
+                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', region: t.region || '', artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
                       <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
                       {!t.genre && <button className="ghost sm" onClick={() => refetchGenre(t.id)}>Genre</button>}
                       <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
-=======
-                    <td>{t.baseline}</td>
-                    <td>{t.genre || '—'}</td>
-                    <td>{t.region || '—'}</td>
-                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
-                    <td className="row">
-                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', region: t.region || '' }); }}>Sửa</button>
-                      <button className="ghost sm" onClick={() => refetchArt(t.id)}>Ảnh</button>
-                      <button className="danger sm" onClick={() => remove(t.id)}>Xoá</button>
->>>>>>> 66bf399 (fix all-time chart)
                     </td>
                   </>
                 )}

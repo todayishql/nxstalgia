@@ -126,6 +126,23 @@
         <div id="champCarousel" class="chip-row"></div>
       </div>
     </div>
+    <div class="panel">
+      <div class="race-head">
+        <div>
+          <h2 style="margin:0">📈 Ranking Since On-Chart</h2>
+          <div class="hint" style="margin:2px 0 0">Each song's rank counted from its own debut week — compare climbs and staying power regardless of when a song actually charted.</div>
+        </div>
+        <div class="race-controls">
+          <input type="text" list="trackOptions" id="debutAdd" placeholder="Add a song…" style="min-width:200px">
+          <button class="btn small" id="debutAddBtn">Add</button>
+        </div>
+      </div>
+      <div class="chartbox tall"><canvas id="chartDebut"></canvas></div>
+      <div class="race-carousel">
+        <div class="hint" style="margin:14px 0 0"><b>Songs compared</b> — click a chip to remove it.</div>
+        <div id="debutChips" class="chip-row"></div>
+      </div>
+    </div>
     <div class="grid2">
       <div class="panel">
         <h2>Top artists by total streams</h2>
@@ -185,44 +202,28 @@
       <div id="atGenderStats"></div>
     </div>
     <div class="panel">
-<<<<<<< HEAD
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <h2 style="margin:0">🏛️ All-time Hall of Fame</h2>
         <input type="text" id="atSearch" placeholder="Search songs / artists…" style="max-width:260px">
       </div>
-      <table>
-        <thead><tr><th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th><th>Song</th><th style="text-align:right">Pre-chart</th><th style="text-align:right">On-chart</th><th style="text-align:right">All-time</th></tr></thead>
-        <tbody id="atTable"></tbody>
-      </table>
-      <div id="atPager" class="race-pager" style="margin-top:12px"></div>
-      <div class="hint">"Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from a pre-chart-only ranking to the all-time ranking (how far on-chart streams moved the song).</div>
-    </div>
-    <div class="panel">
-      <h2>Top artists all-time</h2>
-      <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
-=======
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-        <h2 style="margin:0">🏛️ Bảng vàng All-time</h2>
-        <input type="text" id="atSearch" placeholder="Tìm bài / nghệ sĩ…" style="max-width:260px">
-      </div>
       <div class="pill-row" id="atRegionFilter">
-        <span class="pill on" data-region="ALL">Tất cả khu vực</span>
+        <span class="pill on" data-region="ALL">All regions</span>
         <span class="pill" data-region="US-UK">US-UK</span>
         <span class="pill" data-region="ASIA">ASIA</span>
       </div>
       <table id="atTableEl">
         <thead><tr>
-          <th style="text-align:center">#</th><th></th>
-          <th class="sortable" id="atTh-name" data-sort="name">Bài hát</th>
-          <th class="sortable" style="text-align:right" id="atTh-baseline" data-sort="baseline">Trước chart</th>
-          <th class="sortable" style="text-align:right" id="atTh-tracked" data-sort="tracked">Trong chart</th>
+          <th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th>
+          <th class="sortable" id="atTh-name" data-sort="name">Song</th>
+          <th class="sortable" style="text-align:right" id="atTh-baseline" data-sort="baseline">Pre-chart</th>
+          <th class="sortable" style="text-align:right" id="atTh-tracked" data-sort="tracked">On-chart</th>
           <th class="sortable" style="text-align:right" id="atTh-all" data-sort="all">All-time</th>
           <th class="sortable" style="text-align:right" id="atTh-peak" data-sort="peak">Peak</th>
-          <th></th>
         </tr></thead>
         <tbody id="atTable"></tbody>
       </table>
-      <div class="hint">"Trước chart" = tổng stream tích lũy trước khi chart tồn tại (trước 2026). Số này cộng vào all-time nhưng không ảnh hưởng bảng xếp hạng tuần. Bấm vào tiêu đề cột để sắp xếp · Bấm ✎ để nhập/sửa từng bài.</div>
+      <div id="atPager" class="race-pager" style="margin-top:12px"></div>
+      <div class="hint">"Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from a pre-chart-only ranking to the all-time ranking (how far on-chart streams moved the song). Click a column header to sort.</div>
     </div>
     <div class="panel">
       <h2>🎚️ Ước lượng stream trước chart</h2>
@@ -268,7 +269,6 @@
         <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
         <div class="hint">Tối đa 10 nghệ sĩ/trang · bấm vào cột để mở trang nghệ sĩ.</div>
       </div>
->>>>>>> 66bf399 (fix all-time chart)
     </div>
   </section>
 

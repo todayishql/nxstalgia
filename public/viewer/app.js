@@ -41,11 +41,7 @@ async function loadData(){
 function buildModel(){
   const tracks = new Map();
   for(const t of DATA.tracks){
-<<<<<<< HEAD
-    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), genre:(t.genre||'').trim(), artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
-=======
-    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, genre:t.genre||'', region:t.region||'', years:new Map(), user:false });
->>>>>>> 66bf399 (fix all-time chart)
+    tracks.set(t.id, { id:t.id, name:t.name, artist:t.artist, artists:(Array.isArray(t.artists)&&t.artists.length)?t.artists:splitArtists(t.artist), genre:(t.genre||'').trim(), region:t.region||'', artworkUrl:t.artworkUrl||'', baseline:t.baseline||0, years:new Map(), user:false });
   }
   for(const e of DATA.entries){
     const t = tracks.get(e.trackId); if(!t) continue;
@@ -53,27 +49,30 @@ function buildModel(){
     if(!t.years.has(y)) t.years.set(y, new Map());
     t.years.get(y).set(w, { rank: e.rank ?? null, stream: e.stream ?? 0 });
   }
-  // derive stats per năm
+  // derive stats per năm — total/woc/peak/best gộp riêng theo năm, nhưng streak #1 tính LIÊN TỤC
+  // xuyên năm (không tách "season"): tuần 1/2027 nối ngay sau tuần 52/2026 khi đếm streak.
   const years = new Map();
   for(const t of tracks.values()){
     t._stats = {}; t.allTotal = 0;
-    for(const [y, wm] of t.years){
-      let total=0, woc=0, peak=null, best=0, streak=0, cur=0, prevW=null, maxW=0;
-      const ws=[...wm.keys()].sort((a,b)=>a-b);
-      for(const w of ws){
-        const e=wm.get(w); total+=e.stream||0; if((e.stream||0)>best) best=e.stream;
-        if(e.rank!=null){
-          woc++; if(peak==null||e.rank<peak) peak=e.rank;
-          if(e.rank===1){ cur=(prevW===w-1&&cur>0)?cur+1:1; if(cur>streak) streak=cur; prevW=w; }
-          else { cur=0; prevW=null; }
-          if(w>maxW) maxW=w;
-        } else { cur=0; prevW=null; }
-      }
-      t._stats[y]={ total, woc, peak, best, streak };
-      t.allTotal+=total;
+    const allWeeks=[];
+    for(const [y, wm] of t.years) for(const w of wm.keys()) allWeeks.push([y,w]);
+    allWeeks.sort((a,b)=>gwOf(a[0],a[1])-gwOf(b[0],b[1]));
+    let cur=0, prevGw=null;
+    for(const [y,w] of allWeeks){
+      const e=t.years.get(y).get(w);
+      if(!t._stats[y]) t._stats[y]={ total:0, woc:0, peak:null, best:0, streak:0 };
+      const s=t._stats[y];
+      s.total+=e.stream||0; if((e.stream||0)>s.best) s.best=e.stream;
       if(!years.has(y)) years.set(y,{maxWeek:0});
-      if(maxW>years.get(y).maxWeek) years.get(y).maxWeek=maxW;
+      const gw=gwOf(y,w);
+      if(e.rank!=null){
+        s.woc++; if(s.peak==null||e.rank<s.peak) s.peak=e.rank;
+        if(e.rank===1){ cur=(prevGw===gw-1&&cur>0)?cur+1:1; prevGw=gw; if(cur>s.streak) s.streak=cur; }
+        else { cur=0; prevGw=null; }
+        if(w>years.get(y).maxWeek) years.get(y).maxWeek=w;
+      } else { cur=0; prevGw=null; }
     }
+    for(const y of Object.keys(t._stats)) t.allTotal+=t._stats[y].total;
     t.trackedTotal = t.allTotal;
     t.baseline = t.baseline || 0; // baseline lấy từ track trong DB
     t.allTotal += t.baseline;
@@ -82,11 +81,17 @@ function buildModel(){
   }
   const yearList=[...years.keys()].sort((a,b)=>a-b);
   model = { tracks, years, yearList };
-  if(!years.has(currentYear)) currentYear = yearList[yearList.length-1] || SEED_YEAR;
+  // Năm/tuần "mới nhất" luôn lấy từ dữ liệu thực tế (liên tục kể từ 2026, không tách theo "season"/năm) —
+  // KHÔNG phụ thuộc Settings.currentYear (dễ bị cũ nếu admin đã nhập dữ liệu năm mới hơn nhưng chưa cập nhật settings).
+  currentYear = yearList.length ? yearList[yearList.length-1] : SEED_YEAR;
   fillTrackOptions();
 }
 function statsFor(t,y){ return (t._stats&&t._stats[y]) || {total:0,woc:0,peak:null,best:0,streak:0}; }
 function maxWeekOf(y){ return model.years.has(y)?model.years.get(y).maxWeek:0; }
+
+// Tuần liên tục kể từ Tuần 1/2026 (gw=1) — 52 tuần/năm, không tách theo "season": Tuần 1/2027 nối liền ngay sau Tuần 52/2026.
+function gwOf(y,w){ return (y-2026)*52 + w; }
+function ywOfGw(gw){ return { y: 2026 + Math.floor((gw-1)/52), w: ((gw-1)%52)+1 }; }
 
 function weekChart(y, w){
   const rows=[];
@@ -98,25 +103,28 @@ function weekChart(y, w){
   return rows;
 }
 function entryAt(t,y,w){ return t.years.get(y)?.get(w) || null; }
+// Tra theo tuần liên tục (gw) — cho phép so sánh xuyên năm, vd Tuần 1/2027 so với Tuần 52/2026.
+function entryAtGw(t, gw){ const {y,w}=ywOfGw(gw); return entryAt(t,y,w); }
 function movement(t, y, w){
   const cur=entryAt(t,y,w); if(!cur||cur.rank==null) return null;
-  const prev=entryAt(t,y,w-1);
+  const prev=entryAtGw(t, gwOf(y,w)-1);
   if(prev && prev.rank!=null){
     const d=prev.rank-cur.rank;
     if(d===0) return {cls:'eq', txt:'='};
     return d>0 ? {cls:'up', txt:'▲'+d} : {cls:'down', txt:'▼'+(-d)};
   }
-  const wm=t.years.get(y);
-  if(wm){ for(const [pw,e] of wm) if(pw<w && e.rank!=null) return {cls:'re', txt:'RE'}; }
-  for(const [py,pm] of t.years){ if(py<y){ for(const e of pm.values()) if(e.rank!=null) return {cls:'re', txt:'RE'}; } }
+  // RE-entry: từng lên chart ở bất kỳ tuần liên tục nào trước đó (không tách theo năm)
+  const gw=gwOf(y,w);
+  for(const [py,pm] of t.years){ for(const [pw,e] of pm){ if(gwOf(py,pw)<gw && e.rank!=null) return {cls:'re', txt:'RE'}; } }
   return {cls:'new', txt:'NEW'};
 }
-function wocUpTo(t,y,w){ const wm=t.years.get(y); if(!wm) return 0; let c=0; for(const [pw,e] of wm) if(pw<=w&&e.rank!=null) c++; return c; }
-function peakUpTo(t,y,w){ const wm=t.years.get(y); if(!wm) return null; let p=null; for(const [pw,e] of wm) if(pw<=w&&e.rank!=null&&(p==null||e.rank<p)) p=e.rank; return p; }
+// WOC/peak "tính đến tuần này" — cộng dồn LIÊN TỤC qua các năm (không reset mỗi khi sang năm mới).
+function wocUpTo(t,y,w){ const target=gwOf(y,w); let c=0; for(const [py,pm] of t.years) for(const [pw,e] of pm) if(gwOf(py,pw)<=target && e.rank!=null) c++; return c; }
+function peakUpTo(t,y,w){ const target=gwOf(y,w); let p=null; for(const [py,pm] of t.years) for(const [pw,e] of pm) if(gwOf(py,pw)<=target && e.rank!=null && (p==null||e.rank<p)) p=e.rank; return p; }
 function weekDates(y,w){
-  // Mùa Y dài 52 tuần, đặt tên theo năm KẾT THÚC: bắt đầu ~T9 năm (Y-1) -> kết thúc cuối T8 năm Y.
-  // Neo: Tuần 1/2026 = 29/08/2025 -> Tuần 52/2026 = 21–27/08/2026 (Tuần 1/2027 = 28/08/2026).
-  const start = new Date(Date.UTC(2025,7,29) + ((w-1) + (y-2026)*52)*7*86400000);
+  // Tuần liên tục kể từ Tuần 1/2026 (52 tuần/năm, không tách theo năm/season).
+  // Neo: Tuần 1/2026 = 29/08/2025 -> Tuần 52/2026 = 21–27/08/2026 -> Tuần 1/2027 = 28/08/2026 (nối liền).
+  const start = new Date(Date.UTC(2025,7,29) + (gwOf(y,w)-1)*7*86400000);
   const end = new Date(start.getTime()+6*86400000);
   const f = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
   return f(start)+' – '+f(end);
@@ -156,8 +164,8 @@ function generateBeat(y,w){
   const rows=weekChart(y,w); if(!rows.length) return null;
   const L=[];
   const n1=rows[0];
-  let run=0, ww=w; while(true){ const e=entryAt(n1.t,y,ww); if(e&&e.rank===1){run++;ww--;} else break; }
-  const prev=entryAt(n1.t,y,w-1);
+  let run=0, gww=gwOf(y,w); while(true){ const e=entryAtGw(n1.t,gww); if(e&&e.rank===1){run++;gww--;} else break; }
+  const prev=entryAtGw(n1.t, gwOf(y,w)-1);
   const pct=(prev&&prev.stream)?Math.round((n1.stream-prev.stream)/prev.stream*100):null;
   const mv1=movement(n1.t,y,w);
   let head;
@@ -168,7 +176,7 @@ function generateBeat(y,w){
   L.push('🏆 '+head);
   let bg=null, bd=null;
   for(const r of rows){
-    const p=entryAt(r.t,y,w-1);
+    const p=entryAtGw(r.t, gwOf(y,w)-1);
     if(p&&p.rank!=null){ const d=p.rank-r.rank; if(d>0&&(!bg||d>bg.d)) bg={r,d}; if(d<0&&(!bd||d<bd.d)) bd={r,d}; }
   }
   if(bg) L.push(`📈 Biggest jump: "${bg.r.t.name}" — ${bg.r.t.artist} climbs ${bg.d} spots to #${bg.r.rank}.`);
@@ -220,7 +228,7 @@ function renderOverview(){
   order.forEach((idx,i)=>{
     const r=rows[idx]; if(!r){ pod.innerHTML+='<div></div>'; return; }
     const mv=movement(r.t,y,w);
-    let run=0; if(idx===0){ let ww=w; while(true){ const e=entryAt(r.t,y,ww); if(e&&e.rank===1){run++;ww--;} else break; } }
+    let run=0; if(idx===0){ let gww=gwOf(y,w); while(true){ const e=entryAtGw(r.t,gww); if(e&&e.rank===1){run++;gww--;} else break; } }
     pod.innerHTML += `
     <div class="pod ${cls[i]} clickable" onclick="openTrack('${r.t.id}')">
       ${idx===0&&run>1?`<div class="crown">👑 ${run} weeks in a row</div>`:''}
@@ -281,12 +289,12 @@ function renderChartView(){
   for(const r of rows){
     const mv=movement(r.t,y,w)||{cls:'eq'};
     if(mv.cls==='new' && r.rank<bestNew){ bestNew=r.rank; hotShotId=r.t.id; }
-    const prev=entryAt(r.t,y,w-1);
+    const prev=entryAtGw(r.t, gwOf(y,w)-1);
     if(prev&&prev.rank!=null){ const jump=prev.rank-r.rank; if(jump>bestJump){ bestJump=jump; gainerId=r.t.id; } }
   }
   $('chartTable').innerHTML = rows.length ? rows.map(r=>{
     const mv=movement(r.t,y,w)||{cls:'eq',txt:'='};
-    const prev=entryAt(r.t,y,w-1);
+    const prev=entryAtGw(r.t, gwOf(y,w)-1);
     // bullet ● (quy ước Billboard): stream tăng so với tuần trước
     const bullet = prev && prev.stream>0 && r.stream>prev.stream;
     let lw='—';
@@ -358,9 +366,10 @@ function renderAnalytics(){
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
   if(!charted.length){
     $('records').innerHTML='<div class="empty">No data yet for this year.</div>';
-    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
+    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
     if($('champStats')) $('champStats').innerHTML='<div class="empty">No #1 songs yet.</div>';
     if($('champCarousel')) $('champCarousel').innerHTML='';
+    if($('debutChips')) $('debutChips').innerHTML='';
     $('predBody').innerHTML='<div class="empty" style="padding:16px 0">No data yet.</div>';
     return;
   }
@@ -385,6 +394,7 @@ function renderAnalytics(){
     <div class="record"><div class="rl">Debut straight at No.1</div><div class="rv">${nDebut1} songs</div><div class="rd">debuted at #1</div></div>`;
 
   renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
+  renderDebutRace(); // "Ranking Since On-Chart" — trajectory tính từ tuần đầu tiên on-chart (liên tục, xuyên năm)
 
   const byArtist={}; for(const t of charted) for(const a of t.artists) byArtist[a]=(byArtist[a]||0)+S(t).total;
   const topA=Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,10);
@@ -537,6 +547,65 @@ window.raceStatSize=function(n){ raceState.statSize=+n; raceState.statPage=0; re
 window.raceStatPage=function(d){ raceState.statPage=(raceState.statPage||0)+d; renderRaceMeta(currentYear); };
 window.raceCarToggle=function(){ raceState.carExpanded=!raceState.carExpanded; renderRaceMeta(currentYear); };
 
+/* ───────── Ranking Since On-Chart — hạng tính từ tuần ĐẦU TIÊN on-chart của mỗi bài (liên tục xuyên năm) ───────── */
+let debutState = { selected:new Set(), initialized:false };
+// Chuỗi hạng của 1 bài kể từ tuần đầu tiên on-chart -> tuần cuối cùng on-chart (liên tục theo lịch thật,
+// có khoảng trống nếu bài rớt hạng rồi re-entry) — không tách theo năm nhờ gwOf/entryAtGw.
+function onChartSeries(t){
+  let first=null, last=null;
+  for(const [y,wm] of t.years) for(const [w,e] of wm){ if(e.rank!=null){ const gw=gwOf(y,w); if(first==null||gw<first) first=gw; if(last==null||gw>last) last=gw; } }
+  if(first==null) return [];
+  const arr=[];
+  for(let gw=first; gw<=last; gw++){ const e=entryAtGw(t,gw); arr.push(e&&e.rank!=null?e.rank:null); }
+  return arr;
+}
+function renderDebutRace(){
+  if(!$('chartDebut')) return;
+  const charted=[...model.tracks.values()].filter(t=>t.allWoc>0);
+  if(!debutState.initialized){
+    // mặc định: top bài đang on-chart ở tuần mới nhất đang xem
+    const w=maxWeekOf(currentYear);
+    const cur=w?weekChart(currentYear,w).slice(0,6).map(r=>r.t):[];
+    debutState.selected=new Set(cur.map(t=>t.id));
+    debutState.initialized=true;
+  }
+  renderDebutChips();
+  renderDebutChart();
+}
+function renderDebutChips(){
+  const el=$('debutChips'); if(!el) return;
+  const list=[...debutState.selected].map(id=>model.tracks.get(id)).filter(Boolean);
+  el.innerHTML = list.length ? list.map((t,i)=>`<span class="chip on" onclick="debutRemove('${t.id}')" style="border-color:${RACE_COLORS[i%RACE_COLORS.length]}"><span class="ck">✕</span>${thumbHTML(t)}<span>${esc(t.name)}</span></span>`).join('')
+    : '<span class="hint">No songs selected — search above to add one.</span>';
+  hydrateThumbs();
+}
+function renderDebutChart(){
+  const list=[...debutState.selected].map(id=>model.tracks.get(id)).filter(Boolean);
+  const series=list.map(t=>onChartSeries(t));
+  const maxLen=Math.max(0, ...series.map(s=>s.length));
+  const labels=[]; for(let i=1;i<=maxLen;i++) labels.push('W'+i);
+  const ds=list.map((t,i)=>({
+    label:t.name, data:labels.map((_,ix)=>series[i][ix]??null),
+    borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length],
+    borderDash:RACE_DASHES[i%RACE_DASHES.length], borderWidth:2.5, tension:.3, pointRadius:2, pointHoverRadius:5, spanGaps:false
+  }));
+  const ranks=series.flat().filter(r=>r!=null);
+  const rankMax=Math.max(10, ...ranks, 1);
+  drawChart('chartDebut','line',{ labels, datasets:ds },
+    { plugins:{ legend:{ position:'bottom', labels:{color:'#4A4A4A', boxWidth:10, font:{size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+': #'+c.parsed.y } } },
+      scales:{ y:{ reverse:true, min:1, max:rankMax, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
+               x:{ title:{ display:true, text:'Weeks since on-chart', color:'#5A5A5A' }, ticks:{ maxTicksLimit:14 } } } });
+}
+window.debutRemove=function(id){ debutState.selected.delete(id); renderDebutChips(); renderDebutChart(); };
+function addDebutSong(){
+  const t=findTrackByLabel($('debutAdd').value);
+  if(!t){ toast('Could not recognize that song'); return; }
+  if(!t.allWoc){ toast('This song has never charted'); return; }
+  debutState.selected.add(t.id);
+  $('debutAdd').value='';
+  renderDebutChips(); renderDebutChart();
+}
+
 /* ───────── Dự đoán tuần tới ───────── */
 function renderPrediction(y){
   const w=maxWeekOf(y);
@@ -544,8 +613,8 @@ function renderPrediction(y){
   const cur=weekChart(y,w);
   const proj=[];
   for(const r of cur){
-    const s=[];
-    for(let k=w-2;k<=w;k++){ const e=entryAt(r.t,y,k); if(e&&e.stream>0) s.push(e.stream); }
+    const s=[]; const gwCur=gwOf(y,w);
+    for(let k=gwCur-2;k<=gwCur;k++){ const e=entryAtGw(r.t,k); if(e&&e.stream>0) s.push(e.stream); }
     let g=0,n=0;
     for(let i=1;i<s.length;i++){ g+=(s[i]-s[i-1])/s[i-1]; n++; }
     g=n?g/n:0; g=Math.max(-0.6,Math.min(0.6,g));
@@ -718,11 +787,9 @@ window.openArtist = function(name){
 }
 
 /* ───────── All-time ───────── */
-<<<<<<< HEAD
 let atPage=0, atQuery=''; // phân trang Hall of Fame (100/trang)
 window.atGoPage=function(d){ atPage+=d; renderAllTime(); };
-=======
-const AT_SORT_LABEL = { name:'Bài hát', baseline:'Trước chart', tracked:'Trong chart', all:'All-time', peak:'Peak' };
+const AT_SORT_LABEL = { name:'Song', baseline:'Pre-chart', tracked:'On-chart', all:'All-time', peak:'Peak' };
 const AT_SORT_DEFAULT_DIR = { name:'asc', baseline:'desc', tracked:'desc', all:'desc', peak:'asc' };
 const AT_SORT_GETTER = {
   name: t=>t.name.toLowerCase(),
@@ -756,24 +823,18 @@ function atUpdateSortHeaders(){
 const GENRE_COLORS=['#0A0A0A','#242424','#3A3A3A','#4F4F4F','#656565','#7A7A7A','#909090','#A5A5A5','#BABABA','#D6D6D6'];
 function genreBreakdown(list){
   const sums={};
-  for(const t of list){ const g=(t.genre||'').trim()||'Chưa phân loại'; sums[g]=(sums[g]||0)+t.allTotal; }
+  for(const t of list){ const g=(t.genre||'').trim()||'Unknown'; sums[g]=(sums[g]||0)+t.allTotal; }
   const sorted=Object.entries(sums).sort((a,b)=>b[1]-a[1]);
   const total=sorted.reduce((s,x)=>s+x[1],0);
   const rows=sorted.slice(0,9);
   const restSum=sorted.slice(9).reduce((s,x)=>s+x[1],0);
-  if(restSum>0) rows.push(['Khác', restSum]);
+  if(restSum>0) rows.push(['Other', restSum]);
   return { rows, total };
 }
->>>>>>> 66bf399 (fix all-time chart)
 function renderAllTime(){
   const list=[...model.tracks.values()].filter(t=>t.allTotal>0);
-<<<<<<< HEAD
-  list.sort((a,b)=>b.allTotal-a.allTotal);
+  list.sort((a,b)=>b.allTotal-a.allTotal); // thứ tự gốc — quyết định số hạng "#" cố định, không đổi khi sort/lọc/phân trang
   const artists={}; for(const t of list) for(const a of t.artists) artists[a]=(artists[a]||0)+t.allTotal;
-=======
-  list.sort((a,b)=>b.allTotal-a.allTotal); // thứ tự gốc — quyết định số hạng "#" cố định, không đổi khi sort/lọc bảng
-  const artists={}; for(const t of list) artists[t.artist]=(artists[t.artist]||0)+t.allTotal;
->>>>>>> 66bf399 (fix all-time chart)
   const grand=list.reduce((s,t)=>s+t.allTotal,0);
   const grandBase=list.reduce((s,t)=>s+t.baseline,0);
   const n1=list[0];
@@ -789,51 +850,39 @@ function renderAllTime(){
   renderAllTimeGender(list);
 
   const q=($('atSearch').value||'').trim().toLowerCase();
-<<<<<<< HEAD
   if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
-  const filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
-  const size=100, total=filtered.length, pages=Math.max(1,Math.ceil(total/size));
-  if(atPage>=pages) atPage=pages-1; if(atPage<0) atPage=0;
-  const rankOf=new Map(list.map((t,i)=>[t.id,i+1])); // hạng all-time toàn cục (giữ đúng kể cả khi lọc/phân trang)
+  let filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
+  if(atRegion!=='ALL') filtered=filtered.filter(t=>t.region===atRegion);
+  // hạng "#" + "+/-" luôn tính từ `list` gốc (thứ tự all-time cố định) — không đổi khi sort cột / lọc / phân trang.
+  const rankOf=new Map(list.map((t,i)=>[t.id,i+1]));
   // hạng chỉ theo pre-chart (baseline) — competition rank (baseline bằng nhau -> cùng hạng).
   const preRankOf=new Map(); { const byBase=[...list].sort((a,b)=>b.baseline-a.baseline); let r=0,prev=null,seen=0;
     for(const t of byBase){ seen++; if(t.baseline!==prev){ r=seen; prev=t.baseline; } preRankOf.set(t.id,r); } }
-  const shown=filtered.slice(atPage*size, atPage*size+size);
+  const sorted=atSortRows(filtered);
+  atUpdateSortHeaders();
+  const size=100, total=sorted.length, pages=Math.max(1,Math.ceil(total/size));
+  if(atPage>=pages) atPage=pages-1; if(atPage<0) atPage=0;
+  const shown=sorted.slice(atPage*size, atPage*size+size);
   $('atTable').innerHTML = shown.map((t)=>{
     const pos=rankOf.get(t.id);
     const delta=(preRankOf.get(t.id)||pos)-pos; // >0: on-chart đẩy hạng lên so với chỉ pre-chart
     const mv = delta>0 ? `<span class="mv up">▲${delta}</span>` : delta<0 ? `<span class="mv down">▼${-delta}</span>` : '';
-=======
-  let shown=q?list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)):list;
-  if(atRegion!=='ALL') shown=shown.filter(t=>t.region===atRegion);
-  shown=atSortRows(shown).slice(0,100);
-  atUpdateSortHeaders();
-  $('atTable').innerHTML = shown.map((t,i)=>{
-    const pos=list.indexOf(t)+1;
->>>>>>> 66bf399 (fix all-time chart)
     return `<tr>
       <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
       <td style="text-align:center">${mv}</td>
       <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
-<<<<<<< HEAD
-      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}</div></td>
-=======
-      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">BẠN THÊM</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.region?' · '+esc(t.region):''}</div></td>
->>>>>>> 66bf399 (fix all-time chart)
+      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}${t.region?' · '+esc(t.region):''}</div></td>
       <td class="num">${t.baseline?fmt(t.baseline):'—'}</td>
       <td class="num">${fmt(t.trackedTotal)}</td>
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
+      <td class="num">${t.allPeak?'#'+t.allPeak:'—'}</td>
     </tr>`;
-<<<<<<< HEAD
-  }).join('') || '<tr><td colspan="7"><div class="empty">No songs found.</div></td></tr>';
+  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion!=='ALL'?'No songs tagged with region '+esc(atRegion)+'.':'No songs found.'}</div></td></tr>`;
   const pg=$('atPager');
   if(pg) pg.innerHTML = total>size ? `
     <button class="pg" onclick="atGoPage(-1)" ${atPage<=0?'disabled':''}>‹</button>
     <span>${atPage*size+1}–${Math.min(total,atPage*size+size)} of ${total}</span>
     <button class="pg" onclick="atGoPage(1)" ${atPage>=pages-1?'disabled':''}>›</button>` : '';
-=======
-  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion!=='ALL'?'Chưa có bài nào gán khu vực '+esc(atRegion)+'.':'Không tìm thấy bài nào.'}</div></td></tr>`;
->>>>>>> 66bf399 (fix all-time chart)
 
   // Genre — top 9 theo % cao nhất, phần còn lại gộp "Khác"
   const {rows:genreRows, total:genreTotal} = genreBreakdown(list);
@@ -1046,12 +1095,13 @@ $('wSelect').onchange=e=>{ selectedWeek=+e.target.value; renderChartView(); };
 $('pngBtn').onclick=exportPNG;
 $('trackSearch').oninput=()=>renderTrackList();
 $('cmpBtn').onclick=runCompare;
+$('debutAddBtn').onclick=addDebutSong;
+$('debutAdd').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addDebutSong(); } });
 $('atSearch').oninput=()=>renderAllTime();
-<<<<<<< HEAD
-=======
 $('atRegionFilter').addEventListener('click', e=>{
   const p=e.target.closest('.pill'); if(!p) return;
   atRegion=p.dataset.region;
+  atPage=0;
   document.querySelectorAll('#atRegionFilter .pill').forEach(el=>el.classList.toggle('on', el===p));
   renderAllTime();
 });
@@ -1060,12 +1110,11 @@ $('atTableEl').querySelector('thead').addEventListener('click', e=>{
   const k=th.dataset.sort;
   if(atSort.key===k) atSort.dir = atSort.dir==='asc'?'desc':'asc';
   else atSort = { key:k, dir:AT_SORT_DEFAULT_DIR[k]||'desc' };
+  atPage=0;
   renderAllTime();
 });
 $('atArtistPrev').onclick=()=>{ if(atArtistPage>0){ atArtistPage--; renderAllTime(); } };
 $('atArtistNext').onclick=()=>{ atArtistPage++; renderAllTime(); };
-$('logYear').addEventListener('change',()=>{ const y=parseInt($('logYear').value,10); if(y) $('logWeek').value=(maxWeekOf(y)+1)||1; });
->>>>>>> 66bf399 (fix all-time chart)
 
 (async function init(){
   try{
