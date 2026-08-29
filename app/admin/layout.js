@@ -10,6 +10,7 @@ const NAV = [
   { href: '/admin/tracks', label: 'Songs' },
   { href: '/admin/artists', label: 'Artists' },
   { href: '/admin/chart', label: 'Chart' },
+  { href: '/admin/awards', label: 'Awards' },
 ];
 
 export default function AdminLayout({ children }) {

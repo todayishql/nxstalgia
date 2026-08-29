@@ -5,33 +5,60 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>THE N[26]stalgia — Personal Chart</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=UnifrakturMaguntia&family=Libre+Franklin:wght@400;600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/viewer/styles.css">
+<script>
+/* Đặt theme trước khi vẽ để không nháy sáng/tối */
+(function(){
+  try{
+    var s=localStorage.getItem('n26-theme');
+    if(!s) s=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+    document.documentElement.setAttribute('data-theme', s);
+  }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="ear">
-      <span class="sub">Personal music chart · by streams</span>
-      <div class="head-right">
-        <select class="year" id="yearSelect" aria-label="Select year"></select>
-        <div class="week-pill" id="headerWeek">—</div>
-        <a href="/admin" class="admin-link" title="Data administration">Admin</a>
-      </div>
-    </div>
-    <h1 id="brandTitle">THE N<em>[26]</em>stalgia</h1>
-    <div class="dateline">Personal Music Chart · Multi-Year Edition · Since 2026</div>
-  </header>
 
-  <nav id="tabs">
-    <button data-view="overview" class="active">Overview</button>
-    <button data-view="chart">Chart</button>
-    <button data-view="analytics">Analytics</button>
-    <button data-view="alltime">All-time</button>
-    <button data-view="tracks">Songs</button>
-  </nav>
+<div class="topbar">
+  <div class="wrap tb-inner">
+    <span class="sub">Personal music chart · by streams</span>
+    <span class="spacer"></span>
+    <button type="button" class="ghostmini" id="themeBtn" aria-label="Switch colour theme">
+      <span class="tdot" aria-hidden="true"></span><span id="themeLabel">Light</span>
+    </button>
+    <a href="/admin" class="admin-link" title="Data administration">Admin</a>
+  </div>
+</div>
+
+<header>
+  <h1 id="brandTitle">THE N<em>[26]</em>stalgia</h1>
+  <div class="dateline">Personal music chart · multi-year edition · since 2026</div>
+</header>
+
+<div class="navbar">
+  <div class="wrap nav-inner">
+    <nav id="tabs">
+      <button data-view="overview" class="active">Overview</button>
+      <button data-view="chart">Chart</button>
+      <button data-view="analytics">Analytics</button>
+      <button data-view="alltime">All-time</button>
+      <button data-view="awards">Awards</button>
+      <button data-view="tracks">Songs</button>
+    </nav>
+    <span class="spacer"></span>
+    <div class="season">
+      <label for="yearSelect">Season</label>
+      <select class="year" id="yearSelect" aria-label="Select year"></select>
+      <div class="week-pill" id="headerWeek">—</div>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
 
   <div id="loading" class="loading">Loading data…</div>
 
@@ -45,17 +72,17 @@
         <table><tbody id="top10"></tbody></table>
       </div>
       <div class="panel">
-        <h2>No.1 song streams by week</h2>
+        <h2>No.1 streams by week</h2>
         <div class="chartbox"><canvas id="chartNo1"></canvas></div>
         <div class="hint">Hover to see which song held No.1 each week.</div>
       </div>
     </div>
     <div class="panel beat">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
-        <h2 style="margin:0">📰 Chart Beat</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+        <h2 style="margin:0">Chart beat</h2>
         <button class="btn ghost small" id="copyBeatBtn">Copy bulletin</button>
       </div>
-      <div id="beatBody"></div>
+      <div id="beatBody" style="margin-top:16px"></div>
     </div>
   </section>
 
@@ -68,7 +95,12 @@
         <button class="iconbtn" id="wNext" aria-label="Next week">›</button>
       </div>
       <select id="wSelect" aria-label="Select week"></select>
-      <button class="btn ghost small" id="pngBtn">⬇ Download PNG</button>
+      <div class="pill-row" id="chartMode" style="margin:0">
+        <button type="button" class="pill on" data-mode="songs" onclick="setChartMode('songs')">Songs</button>
+        <button type="button" class="pill" data-mode="artists" onclick="setChartMode('artists')">Artists</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn small" id="pngBtn">⬇ Download PNG</button>
     </div>
     <div class="sheet" id="sheetEl">
       <div class="sheet-head">
@@ -78,24 +110,33 @@
         <div class="sheet-box dates" id="sheetDates">—</div>
       </div>
       <table>
-        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th>Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
+        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th id="colSubject">Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
         <tbody id="chartTable"></tbody>
       </table>
     </div>
-    <div class="hint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
+    <div class="legend">
+      <span class="lg"><span class="lgm" style="color:var(--red)">●</span>Stream gain</span>
+      <span class="lg"><span class="lgm" style="color:var(--up);background:var(--up-bg)">▲</span>Climb</span>
+      <span class="lg"><span class="lgm" style="color:var(--down);background:var(--down-bg)">▼</span>Fall</span>
+      <span class="lg"><span class="lgm" style="background:var(--red);color:var(--on-red);letter-spacing:.06em">NEW</span>First week</span>
+      <span class="lg"><span class="lgm" style="border:1px solid var(--line)">RE</span>Re-entry</span>
+      <span class="lg"><span class="lgm" style="color:var(--faint)">TW/LW</span>This / last week</span>
+      <span class="lg"><span class="lgm" style="color:var(--faint)">WKS</span>Weeks on chart</span>
+    </div>
+    <div class="hint" id="chartHint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
   </section>
 
   <!-- ══ PHÂN TÍCH ══ -->
   <section class="view" id="view-analytics">
     <div class="panel">
-      <h2>Records of the Year <span id="recYear" style="color:var(--gold)"></span></h2>
+      <h2>Records of the season <span id="recYear" style="color:var(--red)"></span></h2>
       <div class="records" id="records"></div>
     </div>
     <div class="panel">
       <div class="race-head">
         <div>
-          <h2 style="margin:0">The #1 Race</h2>
-          <div class="hint" style="margin:2px 0 0">Weekly rank trajectories of the champions.</div>
+          <h2 style="margin:0">The no.1 race</h2>
+          <div class="hint" style="margin:6px 0 0">Weekly rank trajectories of the champions.</div>
         </div>
         <div class="race-controls">
           <label for="raceSort">Sort by</label>
@@ -117,12 +158,12 @@
           </div>
         </div>
         <div class="race-stats">
-          <h3>Champion Stats Comparison</h3>
+          <h3>Champion stats</h3>
           <div id="champStats"></div>
         </div>
       </div>
       <div class="race-carousel">
-        <div class="hint" style="margin:14px 0 0"><b>Champions' Carousel</b> — toggle which songs appear on the chart.</div>
+        <div class="hint" style="margin:16px 0 0"><b>Champions' carousel</b> — toggle which songs appear on the chart.</div>
         <div id="champCarousel" class="chip-row"></div>
       </div>
     </div>
@@ -145,12 +186,12 @@
     </div>
     <div class="grid2">
       <div class="panel">
-        <h2>Top artists by total streams</h2>
+        <h2>Top artists this season</h2>
         <div class="chartbox tall"><canvas id="chartArtists"></canvas></div>
         <div class="hint">Click a bar to open the artist page.</div>
       </div>
       <div class="panel">
-        <h2>Longest-charting (WOC)</h2>
+        <h2>Longest charting · WOC</h2>
         <div class="chartbox tall"><canvas id="chartWoc"></canvas></div>
       </div>
     </div>
@@ -160,26 +201,26 @@
         <div class="chartbox"><canvas id="chartPeaks"></canvas></div>
       </div>
       <div class="panel">
-        <h2>Consistency vs. Explosiveness</h2>
+        <h2>Consistency vs explosiveness</h2>
         <div class="chartbox"><canvas id="chartScatter"></canvas></div>
         <div class="hint">X-axis: weeks on chart · Y-axis: average streams per week.</div>
       </div>
     </div>
     <div class="grid2">
       <div class="panel">
-        <h2>🔮 Next-week prediction</h2>
+        <h2>Next week · forecast</h2>
         <div id="predBody"></div>
         <div class="hint">Extrapolated from the stream momentum of the last 3 weeks — for reference only.</div>
       </div>
       <div class="panel">
-        <h2>⚔️ Head-to-head</h2>
+        <h2>Head to head</h2>
         <div class="controls" style="margin-bottom:10px">
-          <input type="text" list="trackOptions" id="cmpA" placeholder="Song A" style="flex:1;min-width:150px">
+          <input type="text" list="trackOptions" id="cmpA" placeholder="First title" style="flex:1;min-width:150px">
           <span class="vs">VS</span>
-          <input type="text" list="trackOptions" id="cmpB" placeholder="Song B" style="flex:1;min-width:150px">
+          <input type="text" list="trackOptions" id="cmpB" placeholder="Second title" style="flex:1;min-width:150px">
           <button class="btn small" id="cmpBtn">Compare</button>
         </div>
-        <div id="cmpOut"><div class="empty" style="padding:20px 0">Pick two songs to face off.</div></div>
+        <div id="cmpOut"><div class="empty" style="padding:20px 0">Pick two titles to compare peak, weeks on chart, streams and rank trajectory.</div></div>
       </div>
     </div>
   </section>
@@ -187,88 +228,72 @@
   <!-- ══ ALL-TIME ══ -->
   <section class="view" id="view-alltime">
     <div class="kpis" id="atKpis"></div>
-    <div class="panel" id="atGenrePanel">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <h2 style="margin:0">🎧 By genre</h2>
-        <span id="atGenreSub" style="font-size:12px;color:var(--faint)"></span>
-      </div>
-      <div id="atGenres"></div>
-    </div>
-    <div class="panel" id="atGenderPanel">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <h2 style="margin:0">👥 Artist ranking by gender</h2>
-        <span id="atGenderSub" style="font-size:12px;color:var(--faint)"></span>
-      </div>
-      <div id="atGenderStats"></div>
-    </div>
     <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-        <h2 style="margin:0">🏛️ All-time Hall of Fame</h2>
-        <input type="text" id="atSearch" placeholder="Search songs / artists…" style="max-width:260px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Hall of Fame</h2>
+        <input type="text" id="atSearch" placeholder="Search titles or artists…" style="max-width:260px">
       </div>
-      <div class="pill-row" id="atRegionFilter">
-        <span class="pill on" data-region="ALL">All regions</span>
-        <span class="pill" data-region="US-UK">US-UK</span>
-        <span class="pill" data-region="ASIA">ASIA</span>
-      </div>
-      <table id="atTableEl">
-        <thead><tr>
-          <th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th>
-          <th class="sortable" id="atTh-name" data-sort="name">Song</th>
-          <th class="sortable" style="text-align:right" id="atTh-baseline" data-sort="baseline">Pre-chart</th>
-          <th class="sortable" style="text-align:right" id="atTh-tracked" data-sort="tracked">On-chart</th>
-          <th class="sortable" style="text-align:right" id="atTh-all" data-sort="all">All-time</th>
-          <th class="sortable" style="text-align:right" id="atTh-peak" data-sort="peak">Peak</th>
-        </tr></thead>
+      <div class="pill-row" id="atRegions" style="margin:14px 0 0"></div>
+      <table style="margin-top:16px">
+        <thead><tr><th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th><th>Song</th>
+          <th id="atThPre" class="sortable" style="text-align:right" onclick="setAtSort('pre')">Pre-chart<i class="sar"></i></th>
+          <th id="atThOn" class="sortable" style="text-align:right" onclick="setAtSort('on')">On-chart<i class="sar"></i></th>
+          <th id="atThAll" class="sortable" style="text-align:right" onclick="setAtSort('all')">All-time<i class="sar"></i></th></tr></thead>
         <tbody id="atTable"></tbody>
       </table>
-      <div id="atPager" class="race-pager" style="margin-top:12px"></div>
-      <div class="hint">"Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from a pre-chart-only ranking to the all-time ranking (how far on-chart streams moved the song). Click a column header to sort.</div>
+      <div id="atPager" class="race-pager"></div>
+      <div class="hint">The <strong>region</strong> pills re-run the whole ranking inside one region, so you get the <strong>top 100 of that region</strong> — ranks, "+/-" and the 100-song cut are all recomputed against that region alone. A song's region comes from its <strong>artists</strong> (tagged in /admin/artists); a collaboration across regions counts in each of them, and "Untagged" collects songs whose artists have no region yet. The Hall of Fame is the <strong>top 100 songs all-time</strong>. Click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to re-sort those 100 (click again to flip direction) — "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from the pre-chart ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort; <strong>NEW</strong> = the song sat outside the pre-chart top 100 and only reached the Hall of Fame thanks to its on-chart streams.</div>
     </div>
-    <div class="panel">
-      <h2>🎚️ Ước lượng stream trước chart</h2>
-      <p class="hint" style="margin:0 0 12px">Cho các bài ra mắt trước khi có chart: chọn bài, gán <b>mức độ nghe từng năm</b>, hệ thống tính tổng stream tích lũy đến hiện tại. MAX ×1.5 · HIGH ×1.25 · MEDIUM ×1.2 · NORMAL ×1.1 · LOW ×1.05 · MUTE ×1 (đứng yên).</p>
-      <div class="controls">
-        <input type="text" list="trackOptions" id="estTrack" placeholder="Bài hát (khớp danh mục)" style="flex:1;min-width:180px">
-        <label style="color:var(--muted);font-size:13px">Ra mắt</label>
-        <input type="number" id="estStart" min="1990" max="2100" placeholder="2015" style="width:90px">
-        <label style="color:var(--muted);font-size:13px">Đến hết</label>
-        <input type="number" id="estEnd" min="1990" max="2100" value="2025" style="width:90px">
-        <label style="color:var(--muted);font-size:13px">Base</label>
-        <input type="number" id="estBase" min="1" value="500" style="width:80px">
-        <button class="btn small" id="estBuild">Tạo bảng năm</button>
-      </div>
-      <div class="est-years" id="estYears"></div>
-      <div id="estResult"></div>
-      <div class="controls" style="margin-top:12px"><button class="btn" id="estApply">Áp vào baseline của bài</button></div>
-    </div>
-    <div class="panel">
-      <h2>Nhập nhanh số liệu trước chart</h2>
-      <p class="hint" style="margin:0 0 8px">Mỗi dòng: <code>tên bài | tổng stream trước 2026</code>. Tên bài được khớp tự động với danh mục.</p>
-      <textarea id="baselineBox" rows="7" style="width:100%" placeholder="thank u, next | 25000&#10;7 Rings | 18000&#10;All I Want For Christmas Is You | 40000"></textarea>
-      <div class="controls" style="margin-top:8px"><button class="btn small" id="baselineBtn">Lưu số liệu</button></div>
-      <div id="baselineLog" class="hint"></div>
-    </div>
-
-    <!-- 2 biểu đồ (genre + top nghệ sĩ) đặt ở cuối tab All-time -->
     <div class="grid2">
-      <div class="panel">
-        <h2>Thể loại theo stream all-time</h2>
-        <div class="chartbox tall"><canvas id="chartAtGenres"></canvas></div>
-        <div class="hint">Top 9 thể loại chiếm % stream cao nhất · phần còn lại gộp vào "Khác".</div>
-      </div>
-      <div class="panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:6px">
-          <h2 style="margin:0">Top nghệ sĩ all-time</h2>
-          <div class="week-nav">
-            <button class="iconbtn" id="atArtistPrev" aria-label="Trang nghệ sĩ trước">‹</button>
-            <div class="week-label" id="atArtistPageLabel" style="min-width:170px;font-size:12px">—</div>
-            <button class="iconbtn" id="atArtistNext" aria-label="Trang nghệ sĩ sau">›</button>
-          </div>
+      <div class="panel" id="atDistPanel">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <h2 style="margin:0">Stream distribution</h2>
+          <div class="pill-row" id="atDistTabs" style="margin:0"></div>
         </div>
-        <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
-        <div class="hint">Tối đa 10 nghệ sĩ/trang · bấm vào cột để mở trang nghệ sĩ.</div>
+        <div style="margin-top:14px" class="chartbox"><canvas id="chartAtDist"></canvas></div>
+        <div class="hint" id="atDistSub" style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)"></div>
+        <div class="hint">How many songs sit in each 100,000,000-stream bin — bin <em>i</em> covers [<em>i</em>×100M, (<em>i</em>+1)×100M). The x-axis runs up to the top song of the selected measure, so it rescales when you switch. Songs with no streams on that measure land in the first bin; their count is called out above.</div>
       </div>
+      <div class="panel">
+        <h2>Top artists all-time</h2>
+        <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
+        <div class="hint">Collaborations credit full streams to each artist.</div>
+      </div>
+    </div>
+    <div class="panel" id="atBreakdownPanel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Breakdown</h2>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="atBreakSub" style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)"></span>
+          <select id="atBreakType" aria-label="Breakdown type">
+            <option value="genre">Genre streams</option>
+            <option value="artistGenre">Artist ranking by genre</option>
+            <option value="artistGender">Artist ranking by gender</option>
+          </select>
+        </div>
+      </div>
+      <div id="atBreakdown" style="margin-top:16px"></div>
+    </div>
+  </section>
+
+  <!-- ══ AWARDS ══ -->
+  <section class="view" id="view-awards">
+    <div class="kpis" id="awKpis"></div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Titles of the year</h2>
+        <span id="awSub" style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)"></span>
+      </div>
+      <div class="pill-row" id="awYears" style="margin:14px 0"></div>
+      <div id="awList"></div>
+    </div>
+    <div class="panel" id="awHonoursPanel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Most decorated</h2>
+        <span id="awHonoursSub" style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)"></span>
+      </div>
+      <div id="awHonours" style="margin-top:16px"></div>
+      <div class="hint">Across every year on record. "Wins" counts 🏆 titles; "noms" counts every appearance in a category.</div>
     </div>
   </section>
 
@@ -279,6 +304,7 @@
     </div>
     <div id="trackDetail"></div>
     <div class="panel">
+      <h2>Catalogue</h2>
       <table>
         <thead><tr><th></th><th>Song</th><th style="text-align:right">Peak</th><th style="text-align:right">WOC</th><th style="text-align:right">Streams (year)</th><th style="text-align:right">Streams (all-time)</th></tr></thead>
         <tbody id="trackList"></tbody>
@@ -287,10 +313,9 @@
   </section>
 
   <datalist id="trackOptions"></datalist>
-</div>
+</main>
 
 <div class="toast" id="toast"></div>
-
 
 <script src="/viewer/app.js"></script>
 </body>

@@ -1,15 +1,12 @@
 /* ───────── state ───────── */
 // Dữ liệu lấy từ backend MongoDB qua /api/bootstrap (không còn SEED/localStorage)
-let DATA = { settings:{}, tracks:[], entries:[], artists:[] };
+let DATA = { settings:{}, tracks:[], entries:[], artists:[], awards:[] };
 let ARTMETA = new Map(); // artistKey -> { gender, region, genres }
 let SEED_YEAR = 2026;
 let model = null;
 let charts = {};
 let currentYear = SEED_YEAR;
 let selectedWeek = null;
-let atRegion = 'ALL';                       // bộ lọc khu vực ở Bảng vàng All-time: ALL | US-UK | ASIA
-let atSort = { key:'all', dir:'desc' };      // cột đang sort ở Bảng vàng All-time
-let atArtistPage = 0;                        // trang hiện tại của biểu đồ Top nghệ sĩ all-time
 
 const $ = id => document.getElementById(id);
 const fmt = n => (n==null ? '—' : n.toLocaleString('en-US'));
@@ -23,6 +20,52 @@ const artistKey = a => String(a||'').trim().toLowerCase().replace(/\s+/g,' ');
 
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none', 3200); }
 
+/* ───────── theme + màu chart ─────────
+   Màu chart đọc từ CSS custom property nên tự đổi theo theme sáng/tối. */
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function isDark(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
+// bảng màu categorical cho line/doughnut nhiều series (khớp bản thiết kế Blue)
+const PALETTE=['#4C93FF','#38D39A','#FFB454','#FF6F6F','#A78BFA','#22D3EE','#F472B6','#7DA0C4'];
+function TH(){
+  const dark=isDark();
+  return {
+    ink:cssv('--ink')||'#0C1420', red:cssv('--red')||'#1D5BD6',
+    mid:cssv('--muted')||'#4E5B6A', faint:cssv('--faint')||'#5A6673',
+    onInk:cssv('--paper')||'#F4F8FD',
+    grid: dark?'rgba(237,243,250,.10)':'rgba(12,20,32,.08)',
+    fill: dark?'rgba(76,147,255,.28)':'rgba(29,91,214,.18)'
+  };
+}
+function applyChartDefaults(){
+  if(typeof Chart==='undefined') return;
+  const t=TH();
+  Chart.defaults.color=t.mid;
+  Chart.defaults.borderColor=t.grid;
+  Chart.defaults.font.family='"Nunito Sans", system-ui, sans-serif';
+  Chart.defaults.font.size=11;
+  Chart.defaults.elements.bar.borderRadius=6;
+  Object.assign(Chart.defaults.plugins.tooltip,{
+    backgroundColor:t.ink, titleColor:t.onInk, bodyColor:t.onInk,
+    cornerRadius:8, displayColors:false, padding:10,
+    titleFont:{family:'"JetBrains Mono", monospace', size:10},
+    bodyFont:{family:'"JetBrains Mono", monospace', size:11}
+  });
+  Object.assign(Chart.defaults.plugins.legend.labels,{
+    color:t.ink, boxWidth:10, boxHeight:10,
+    font:{family:'"JetBrains Mono", monospace', size:10}
+  });
+  Chart.defaults.scale.ticks.font={family:'"JetBrains Mono", monospace', size:10};
+}
+applyChartDefaults();
+function themeLabel(){ const el=$('themeLabel'); if(el) el.textContent = isDark()?'Light':'Dark'; }
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  try{ localStorage.setItem('n26-theme', t); }catch(e){}
+  themeLabel();
+  applyChartDefaults();
+  if(model) refreshAll();   // vẽ lại chart bằng màu của theme mới
+}
+
 /* ───────── data (backend API) ───────── */
 async function loadData(){
   const res = await fetch('/api/bootstrap');
@@ -32,7 +75,9 @@ async function loadData(){
   DATA.tracks = DATA.tracks || [];
   DATA.entries = DATA.entries || [];
   DATA.artists = DATA.artists || [];
+  DATA.awards = DATA.awards || [];
   ARTMETA = new Map(DATA.artists.map(a => [a.key, { gender:a.gender||'', region:a.region||'', genres:a.genres||[] }]));
+  REGION_CACHE.clear(); // metadata nghệ sĩ đổi -> vùng của bài phải tính lại
   SEED_YEAR = DATA.settings.currentYear || DATA.entries[0]?.year || 2026;
   currentYear = SEED_YEAR;
 }
@@ -81,6 +126,7 @@ function buildModel(){
   }
   const yearList=[...years.keys()].sort((a,b)=>a-b);
   model = { tracks, years, yearList };
+  ARTCHART=null; // model dựng lại -> bỏ cache bảng xếp hạng nghệ sĩ
   // Năm/tuần "mới nhất" luôn lấy từ dữ liệu thực tế (liên tục kể từ 2026, không tách theo "season"/năm) —
   // KHÔNG phụ thuộc Settings.currentYear (dễ bị cũ nếu admin đã nhập dữ liệu năm mới hơn nhưng chưa cập nhật settings).
   currentYear = yearList.length ? yearList[yearList.length-1] : SEED_YEAR;
@@ -198,8 +244,14 @@ function generateBeat(y,w){
 function renderBeat(){
   const w=maxWeekOf(currentYear);
   const beat=w?generateBeat(currentYear,w):null;
+  // mỗi dòng bắt đầu bằng 1 emoji -> tách thành cột icon riêng cho đúng nhịp bản Blue
+  const beatLine=l=>{
+    const sp=l.indexOf(' ');
+    const ic=sp>0?l.slice(0,sp):'·', tx=sp>0?l.slice(sp+1):l;
+    return `<p><span class="bic">${esc(ic)}</span><span>${esc(tx)}</span></p>`;
+  };
   $('beatBody').innerHTML = beat
-    ? `<div class="bt">${esc(beat.title)}</div>`+beat.lines.map(l=>`<p>${esc(l)}</p>`).join('')
+    ? `<div class="bt">${esc(beat.title)}</div>`+beat.lines.map(beatLine).join('')
     : '<div class="empty" style="padding:16px 0">No data yet for this year.</div>';
   $('copyBeatBtn').onclick=()=>{
     if(!beat) return;
@@ -219,7 +271,7 @@ function renderOverview(){
   const no1=rows[0];
   $('kpis').innerHTML = `
     <div class="kpi"><div class="lbl">Current week</div><div class="val">${w?('W'+w):'—'}</div><div class="note">${rows.length} songs on chart</div></div>
-    <div class="kpi"><div class="lbl">No.1 this week</div><div class="val" style="font-size:17px;font-family:var(--display)">${no1?esc(no1.t.name):'—'}</div><div class="note">${no1?esc(no1.t.artist):''}</div></div>
+    <div class="kpi"><div class="lbl">No.1 this week</div><div class="val name">${no1?esc(no1.t.name):'—'}</div><div class="note">${no1?esc(no1.t.artist):''}</div></div>
     <div class="kpi"><div class="lbl">Songs charted</div><div class="val">${charted.length}</div><div class="note">of ${model.tracks.size} songs in catalog</div></div>
     <div class="kpi"><div class="lbl">Artists</div><div class="val">${artists.size}</div><div class="note">appeared in ${y}</div></div>`;
 
@@ -260,15 +312,27 @@ function renderOverview(){
     const top=weekChart(y,ww)[0];
     labels.push('W'+ww); data.push(top?top.stream:null); names.push(top?top.t.name+' — '+top.t.artist:'');
   }
+  const t=TH();
+  // fill gradient dưới đường No.1 — nhạt dần xuống đáy, đúng chất bản Blue
+  let fill=t.fill;
+  const cv=$('chartNo1');
+  if(cv){ const g=cv.getContext('2d').createLinearGradient(0,0,0,290); g.addColorStop(0,t.fill); g.addColorStop(1,'rgba(0,0,0,0)'); fill=g; }
   drawChart('chartNo1','line',{
-    labels, datasets:[{ data, borderColor:'#0A0A0A', backgroundColor:'rgba(10,10,10,.07)', fill:true, tension:.3, pointRadius:2, pointHoverRadius:5, spanGaps:true }]
+    labels, datasets:[{ data, borderColor:t.red, borderWidth:2.5, backgroundColor:fill, fill:true, tension:.35,
+      pointRadius:3, pointBackgroundColor:t.red, pointBorderWidth:0, pointHoverRadius:6, spanGaps:true }]
   },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=>items[0]?names[items[0].dataIndex]:'', label:(c)=>c.label+': '+fmt(c.parsed.y)+' streams' } } },
-     scales:{ x:{ ticks:{ maxTicksLimit:12 } }, y:{ beginAtZero:true } } });
+     scales:{ x:{ ticks:{ maxTicksLimit:12 }, grid:{ display:false } },
+              y:{ beginAtZero:true, ticks:{ callback:v=>abbr(v) }, grid:{ color:t.grid } } } });
   renderBeat();
   hydrateThumbs();
 }
 
 /* ───────── render: chart sheet ───────── */
+const SONG_HINT="TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.";
+const ARTIST_HINT="Artists ranked by their on-chart streams that week — a song credits its full stream count to every artist on it, so a collab feeds both. TW/LW = this week's rank / last week's rank · ● = streams up from last week · Wks = weeks on the artist chart. Click an artist for their profile.";
+let chartMode='songs'; // 'songs' | 'artists' — cùng sheet, cùng week-nav
+window.setChartMode=function(m){ chartMode = m==='artists' ? 'artists' : 'songs'; renderChartView(); };
+
 function renderChartView(){
   const y=currentYear;
   const mw=maxWeekOf(y);
@@ -282,6 +346,11 @@ function renderChartView(){
   $('sheetTitle').innerHTML='THE&nbsp;N<em>['+yy(y)+']</em>stalgia';
   $('sheetWeekNo').textContent=w;
   $('sheetDates').textContent=weekDates(y,w);
+
+  for(const b of document.querySelectorAll('#chartMode .pill')) b.classList.toggle('on', b.dataset.mode===chartMode);
+  $('colSubject').textContent = chartMode==='artists' ? 'Artist' : 'Song';
+  $('chartHint').textContent = chartMode==='artists' ? ARTIST_HINT : SONG_HINT;
+  if(chartMode==='artists'){ renderArtistSheet(y,w); return; }
 
   const rows=weekChart(y,w);
   // Callout kiểu Billboard: Hot Shot Debut = bài NEW hạng cao nhất; Greatest Gainer = vọt hạng mạnh nhất
@@ -328,29 +397,125 @@ function renderChartView(){
   }).join('') : '<tr><td colspan="8"><div class="empty">No data yet for this week — edit data at /admin.</div></td></tr>';
   hydrateThumbs();
 }
+/* ── Bảng xếp hạng NGHỆ SĨ theo tuần ──
+   Gộp on-chart stream của mọi bài trong tuần; mỗi nghệ sĩ trên 1 bài nhận trọn stream của bài đó
+   (khớp cách gộp "Top artists" ở All-time). Dựng 1 lần cho cả catalog rồi cache. */
+let ARTCHART=null;
+function buildArtistChart(){
+  if(ARTCHART) return ARTCHART;
+  const byYear=new Map();      // year -> week -> Map(key -> {key,name,streams,songs})
+  const firstOf=new Map();     // key -> year*100+week lần đầu có stream (phân biệt NEW vs RE)
+  for(const t of model.tracks.values()){
+    for(const [y,wm] of t.years){
+      let ym=byYear.get(y); if(!ym){ ym=new Map(); byYear.set(y,ym); }
+      for(const [w,e] of wm){
+        const s=e.stream||0; if(s<=0) continue;
+        let wk=ym.get(w); if(!wk){ wk=new Map(); ym.set(w,wk); }
+        const yw=y*100+w;
+        for(const a of t.artists){
+          const k=artistKey(a);
+          let r=wk.get(k); if(!r){ r={ key:k, name:a, streams:0, songs:0 }; wk.set(k,r); }
+          r.streams+=s; r.songs++;
+          if(!firstOf.has(k) || yw<firstOf.get(k)) firstOf.set(k,yw);
+        }
+      }
+    }
+  }
+  const out=new Map();
+  for(const [y,ym] of byYear){
+    const weeks=new Map();
+    for(const [w,wk] of ym){
+      const rows=[...wk.values()].sort((a,b)=>b.streams-a.streams || a.name.localeCompare(b.name));
+      const rankOf=new Map(), byKey=new Map();
+      rows.forEach((r,i)=>{ rankOf.set(r.key,i+1); byKey.set(r.key,r); });
+      weeks.set(w,{ rows, rankOf, byKey });
+    }
+    out.set(y,weeks);
+  }
+  ARTCHART={ byYear:out, firstOf };
+  return ARTCHART;
+}
+// peak + số tuần có mặt tính tới tuần w (trong năm y)
+function artistRunUpTo(weeks, key, w){
+  let peak=null, woc=0;
+  for(let i=1;i<=w;i++){
+    const r=weeks.get(i)?.rankOf.get(key);
+    if(r==null) continue;
+    woc++; if(peak==null||r<peak) peak=r;
+  }
+  return { peak, woc };
+}
+
+function renderArtistSheet(y,w){
+  const ac=buildArtistChart();
+  const weeks=ac.byYear.get(y)||new Map();
+  const rows=weeks.get(w)?.rows||[];
+  const prev=weeks.get(w-1)||null;
+
+  // Callout: Hot Shot Debut = nghệ sĩ mới hạng cao nhất; Greatest Gainer = vọt hạng mạnh nhất
+  let hotShot=null, gainer=null, bestNew=Infinity, bestJump=0;
+  rows.forEach((r,i)=>{
+    const pos=i+1, pr=prev?prev.rankOf.get(r.key):null;
+    if(pr==null){ if(ac.firstOf.get(r.key)===y*100+w && pos<bestNew){ bestNew=pos; hotShot=r.key; } }
+    else { const jump=pr-pos; if(jump>bestJump){ bestJump=jump; gainer=r.key; } }
+  });
+
+  $('chartTable').innerHTML = rows.length ? rows.map((r,i)=>{
+    const pos=i+1;
+    const pr=prev?prev.rankOf.get(r.key):null;
+    const prow=prev?prev.byKey.get(r.key):null;
+    let lw='—', mvCls='none', mvTxt='';
+    if(pr!=null){
+      const d=pr-pos; lw=pr;
+      if(d>0){ mvCls='up'; mvTxt='▲'+d; } else if(d<0){ mvCls='down'; mvTxt='▼'+(-d); } else mvCls='eq';
+    } else {
+      lw = ac.firstOf.get(r.key)===y*100+w ? '<span class="lw-new">NEW</span>' : '<span class="lw-re">RE</span>';
+    }
+    let pctTxt='', pctCls='';
+    if(prow && prow.streams>0){
+      const p=Math.round((r.streams-prow.streams)/prow.streams*100);
+      pctTxt = p>999?'>999%':(p>0?'+':'')+p+'%'; pctCls = p>0?' pos':(p<0?' neg':'');
+    }
+    const bullet = prow && prow.streams>0 && r.streams>prow.streams;
+    const run=artistRunUpTo(weeks,r.key,w);
+    const callout = r.key===hotShot ? '<span class="callout hotshot">Hot Shot Debut</span>'
+                  : (r.key===gainer && bestJump>=3) ? '<span class="callout gainer">Greatest Gainer</span>' : '';
+    return `<tr class="clickable" onclick="openArtist('${jsStr(r.name)}')">
+      <td class="rk-tw${pos===1?' no1':''}"><span class="rk-num">${pos}${bullet?'<span class="blt">●</span>':''}</span></td>
+      <td class="rk-lw">${lw}</td>
+      <td class="rk-mv ${mvCls}"><span class="mv-in">${mvTxt}</span></td>
+      <td><div class="songcell"><div class="songmeta"><div class="s-name">${esc(r.name)}${callout}</div><div class="s-artist">${r.songs} song${r.songs>1?'s':''} on chart</div></div></div></td>
+      <td class="pts">${fmt(r.streams)}</td>
+      <td class="pct${pctCls}">${pctTxt}</td>
+      <td class="peakc${run.peak===1?' no1':''}">${run.peak??'—'}</td>
+      <td class="wocc">${run.woc}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8"><div class="empty">No artist data for this week — edit data at /admin.</div></td></tr>';
+}
+
 async function exportPNG(){
   if(typeof html2canvas==='undefined'){ toast('Image rendering library not loaded — open the file in a browser and try again'); return; }
   toast('Rendering image…');
   try{
-    const canvas=await html2canvas($('sheetEl'),{ scale:2, useCORS:true, backgroundColor:'#FAFAFA' });
+    const canvas=await html2canvas($('sheetEl'),{ scale:2, useCORS:true, backgroundColor:cssv('--sheet')||'#FFFFFF' });
     const a=document.createElement('a');
     a.href=canvas.toDataURL('image/png');
-    a.download='n'+yy(currentYear)+'stalgia-w'+selectedWeek+'.png';
+    a.download='n'+yy(currentYear)+'stalgia-w'+selectedWeek+(chartMode==='artists'?'-artists':'')+'.png';
     a.click();
     toast('PNG image downloaded');
   }catch(e){ toast('Could not render image (artwork may be blocked by CORS)'); }
 }
 
 /* ───────── render: analytics ───────── */
-const RACE_COLORS=['#0A0A0A','#4A4A4A','#767676','#9E9E9E','#2E2E2E','#5F5F5F','#8A8A8A','#BDBDBD'];
-/* nét đứt xen kẽ để phân biệt các đường cùng tông xám (style trắng đen) */
-const RACE_DASHES=[[],[6,3],[2,3],[10,4],[],[6,3],[2,3],[10,4]];
+const RACE_COLORS=PALETTE;
+/* nét liền — các line đã khác màu nên không cần nét đứt phân biệt */
+const RACE_DASHES=[[],[],[],[],[],[],[],[]];
 /* Champions: line được chọn tô màu để phân biệt; state giữ qua các lần render */
-const CHAMP_COLORS=['#C8A02A','#B23A48','#264F8E','#6B3FA0','#2E8B57','#C0632B','#0A0A0A','#8A6D3B'];
+const CHAMP_COLORS=PALETTE;
 let raceState={ year:null, sort:'weeks', selected:new Set(), upTo:null, champs:[], colorOf:{}, statSize:5, statPage:0, carExpanded:false };
 /* Vẽ tên bài ở điểm cuối của các line champion đang chọn */
 const raceLabelPlugin={ id:'raceLabels', afterDatasetsDraw(chart){
-  const ctx=chart.ctx; ctx.save(); ctx.font='700 11px "Libre Franklin", system-ui, sans-serif'; ctx.textBaseline='middle';
+  const ctx=chart.ctx; ctx.save(); ctx.font='700 11px "Nunito Sans", system-ui, sans-serif'; ctx.textBaseline='middle';
   chart.data.datasets.forEach((ds,i)=>{
     if(!ds._champ) return;
     const meta=chart.getDatasetMeta(i); let pt=null;
@@ -396,19 +561,22 @@ function renderAnalytics(){
   renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
   renderDebutRace(); // "Ranking Since On-Chart" — trajectory tính từ tuần đầu tiên on-chart (liên tục, xuyên năm)
 
+  const TC=TH();
   const byArtist={}; for(const t of charted) for(const a of t.artists) byArtist[a]=(byArtist[a]||0)+S(t).total;
   const topA=Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,10);
   drawChart('chartArtists','bar',{
     labels: topA.map(x=>x[0]),
-    datasets:[{ data: topA.map(x=>x[1]), backgroundColor:'#0A0A0A', borderRadius:0 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}},
+    datasets:[{ data: topA.map(x=>x[1]), backgroundColor: topA.map((_,i)=>i===0?TC.red:TC.mid), barPercentage:.8 }]
+  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmt(c.parsed.x)+' streams'}}},
+     scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid} }, y:{ grid:{display:false} } },
      onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
 
   const topW=[...charted].sort((a,b)=>S(b).woc-S(a).woc).slice(0,10);
   drawChart('chartWoc','bar',{
     labels: topW.map(t=>t.name),
-    datasets:[{ data: topW.map(t=>S(t).woc), backgroundColor:'#4A4A4A', borderRadius:0 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.x+' weeks · '+topW[c.dataIndex].artist}}}, scales:{x:{beginAtZero:true}} });
+    datasets:[{ data: topW.map(t=>S(t).woc), backgroundColor:TC.red, barPercentage:.8 }]
+  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.x+' weeks · '+topW[c.dataIndex].artist}}},
+     scales:{ x:{ beginAtZero:true, ticks:{precision:0}, grid:{color:TC.grid} }, y:{ grid:{display:false} } } });
 
   const buckets={'#1':0,'Top 3':0,'Top 10':0,'Top 20':0,'Top 51':0,'Outside Top 51':0};
   for(const t of charted){
@@ -419,14 +587,19 @@ function renderAnalytics(){
   }
   drawChart('chartPeaks','doughnut',{
     labels:Object.keys(buckets),
-    datasets:[{ data:Object.values(buckets), backgroundColor:['#0A0A0A','#3D3D3D','#666666','#8F8F8F','#B5B5B5','#D6D6D6'], borderColor:'#EFEFEF', borderWidth:2 }]
-  },{ plugins:{ legend:{ position:'right', labels:{color:'#4A4A4A', boxWidth:12} } } });
+    datasets:[{ data:Object.values(buckets),
+      backgroundColor:[TC.red, PALETTE[1], PALETTE[2], PALETTE[4], PALETTE[5], TC.grid], borderWidth:0, spacing:2 }]
+  },{ cutout:'62%', plugins:{ legend:{ position:'right' },
+       tooltip:{ callbacks:{ label:c=>c.label+' · '+c.parsed+' song'+(c.parsed===1?'':'s') } } } });
 
-  const pts=charted.filter(t=>S(t).woc>=2).map(t=>({x:S(t).woc, y:Math.round(S(t).total/S(t).woc), t}));
+  const pts=charted.filter(t=>S(t).woc>=2).map(t=>({x:S(t).woc, y:Math.round(S(t).total/S(t).woc), t, one:S(t).peak===1}));
   drawChart('chartScatter','scatter',{
-    datasets:[{ data:pts, backgroundColor:'rgba(10,10,10,.65)', pointRadius:4, pointHoverRadius:7 }]
-  },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>{const p=c.raw; return p.t.name+' — '+p.t.artist+' · '+p.x+' weeks · '+fmt(p.y)+' streams/week';} } } },
-     scales:{ x:{ title:{display:true, text:'Weeks on chart', color:'#5A5A5A'} }, y:{ title:{display:true, text:'Avg streams / week', color:'#5A5A5A'}, beginAtZero:true } },
+    datasets:[{ data:pts, backgroundColor:pts.map(p=>p.one?TC.red:TC.mid), pointRadius:5, pointHoverRadius:7 }]
+  },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>{const p=c.raw; return [p.t.name+' — '+p.t.artist, p.x+' wks · '+fmt(p.y)+'/wk'];} } } },
+     scales:{ x:{ ticks:{precision:0}, grid:{color:TC.grid},
+                  title:{display:true, text:'WEEKS ON CHART', color:TC.mid, font:{family:'"JetBrains Mono", monospace', size:9}} },
+              y:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid},
+                  title:{display:true, text:'AVG STREAMS / WEEK', color:TC.mid, font:{family:'"JetBrains Mono", monospace', size:9}} } },
      onClick:(ev,els)=>{ if(els.length) openTrack(pts[els[0].index].t.id); } });
 
   renderPrediction(y);
@@ -522,22 +695,25 @@ function renderRaceChart(y){
   const upTo=raceState.upTo||maxWeekOf(y)||1;
   const labels=[]; for(let w=1;w<=upTo;w++) labels.push('W'+w);
   const series=c=>labels.map((_,ix)=>{ const e=entryAt(c.t,y,ix+1); return (e&&e.rank!=null)?e.rank:null; });
+  const t=TH();
   const ds=[];
-  // line nền (không chọn) — xám mờ làm ngữ cảnh
+  // line nền (không chọn) — mờ, chỉ làm ngữ cảnh
   sorted.filter(c=>!raceState.selected.has(c.id)).forEach(c=>ds.push({
-    label:c.t.name, data:series(c), borderColor:'rgba(28,23,16,.13)', backgroundColor:'transparent',
-    borderWidth:1, pointRadius:0, tension:.3, spanGaps:false }));
+    label:c.t.name, data:series(c), borderColor:t.grid, backgroundColor:'transparent',
+    borderWidth:1, pointRadius:0, tension:.35, spanGaps:false, order:2 }));
   // line champion đang chọn — tô màu, dày, có nhãn
   sorted.filter(c=>raceState.selected.has(c.id)).forEach(c=>ds.push({
     label:c.t.name, _champ:true, data:series(c),
-    borderColor:raceState.colorOf[c.id]||'#0A0A0A', backgroundColor:raceState.colorOf[c.id]||'#0A0A0A',
-    borderWidth:2.5, pointRadius:2, pointHoverRadius:5, tension:.3, spanGaps:false }));
+    borderColor:raceState.colorOf[c.id]||t.red, backgroundColor:raceState.colorOf[c.id]||t.red,
+    borderWidth:2.5, pointRadius:0, pointHoverRadius:5, tension:.35, spanGaps:false, order:1 }));
   const ranks=sorted.flatMap(c=>{ const wm=c.t.years.get(y)||new Map(); return [...wm.entries()].filter(([w,e])=>w<=upTo&&e.rank!=null).map(([,e])=>e.rank); });
   const rankMax=Math.max(10, ...ranks);
   drawChart('chartBump','line',{ labels, datasets:ds },
     { layout:{ padding:{ right:96 } },
-      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.dataset.label+': #'+c.parsed.y } } },
-      scales:{ y:{ reverse:true, min:1, max:rankMax, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } }, x:{ ticks:{ maxTicksLimit:14 } } } },
+      interaction:{ mode:'nearest', intersect:false },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
+      scales:{ y:{ reverse:true, min:1, max:rankMax, grid:{color:t.grid}, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
+               x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } },
     [raceLabelPlugin]);
 }
 window.raceToggle=function(id){ if(raceState.selected.has(id)) raceState.selected.delete(id); else raceState.selected.add(id); renderRaceMeta(currentYear); renderRaceChart(currentYear); };
@@ -591,10 +767,11 @@ function renderDebutChart(){
   }));
   const ranks=series.flat().filter(r=>r!=null);
   const rankMax=Math.max(10, ...ranks, 1);
+  const t=TH();
   drawChart('chartDebut','line',{ labels, datasets:ds },
-    { plugins:{ legend:{ position:'bottom', labels:{color:'#4A4A4A', boxWidth:10, font:{size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+': #'+c.parsed.y } } },
-      scales:{ y:{ reverse:true, min:1, max:rankMax, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
-               x:{ title:{ display:true, text:'Weeks since on-chart', color:'#5A5A5A' }, ticks:{ maxTicksLimit:14 } } } });
+    { plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'"Nunito Sans", sans-serif', size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
+      scales:{ y:{ reverse:true, min:1, max:rankMax, grid:{color:t.grid}, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
+               x:{ grid:{display:false}, title:{ display:true, text:'WEEKS SINCE ON-CHART', color:t.mid, font:{family:'"JetBrains Mono", monospace', size:9} }, ticks:{ maxTicksLimit:14 } } } });
 }
 window.debutRemove=function(id){ debutState.selected.delete(id); renderDebutChips(); renderDebutChart(); };
 function addDebutSong(){
@@ -627,7 +804,7 @@ function renderPrediction(y){
   let html='<div class="bt" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;margin-bottom:10px">PROJECTION FOR WEEK '+(w+1)+'/'+y+'</div>';
   html+='<table><tbody>'+proj.slice(0,10).map(x=>{
     const d=x.cur-x.rank;
-    const mv=d===0?'<span class="mv eq">=</span>':(d>0?'<span class="mv up">▲'+d+'</span>':'<span class="mv down">▼'+(-d)+'</span>');
+    const mv=d===0?'<span class="mv eq">=</span>':(d>0?'<span class="mv up">+'+d+'</span>':'<span class="mv down">-'+(-d)+'</span>');
     let flag='';
     if(x.rank===1&&x.cur!==1) flag='<span class="pred-flag hot">#1 CONTENDER</span>';
     return `<tr class="clickable" onclick="openTrack('${x.t.id}')">
@@ -671,9 +848,11 @@ function runCompare(){
   const mk=(t,color)=>({ label:t.name, data:labels.map((_,ix)=>{const e=entryAt(t,y,ix+1); return e&&e.rank!=null?e.rank:null;}),
     borderColor:color, backgroundColor:color, tension:.25, pointRadius:2, spanGaps:false });
   const maxR=Math.max(20, ...[a,b].flatMap(t=>{const wm=t.years.get(y)||new Map(); return [...wm.values()].filter(e=>e.rank!=null).map(e=>e.rank);}));
-  drawChart('chartCmp','line',{ labels, datasets:[mk(a,'#0A0A0A'), mk(b,'#8F8F8F')] },
-    { plugins:{ legend:{position:'bottom', labels:{color:'#4A4A4A', boxWidth:10, font:{size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+': #'+c.parsed.y}} },
-      scales:{ y:{ reverse:true, min:1, max:maxR, ticks:{callback:v=>'#'+v} }, x:{ ticks:{maxTicksLimit:12} } } });
+  const tc=TH();
+  drawChart('chartCmp','line',{ labels, datasets:[mk(a,tc.red), mk(b,PALETTE[1])] },
+    { plugins:{ legend:{position:'bottom', labels:{font:{family:'"Nunito Sans", sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
+      scales:{ y:{ reverse:true, min:1, max:maxR, grid:{color:tc.grid}, ticks:{callback:v=>'#'+v} },
+               x:{ grid:{display:false}, ticks:{maxTicksLimit:12} } } });
   hydrateThumbs();
 }
 
@@ -729,13 +908,16 @@ window.openTrack = function(id, yPick){
   const wm=t.years.get(y)||new Map();
   const ws=[...wm.entries()].filter(([w,e])=>e.rank!=null).sort((a,b)=>a[0]-b[0]);
   const maxRank=Math.max(51,...ws.map(([w,e])=>e.rank));
+  const tt=TH();
   drawChart('chartTraj','line',{
     labels: ws.map(([w])=>'W'+w),
-    datasets:[{ data: ws.map(([w,e])=>e.rank), borderColor:'#0A0A0A', backgroundColor:'rgba(10,10,10,.06)',
-      pointBackgroundColor: ws.map(([w,e])=>e.rank===1?'#0A0A0A':'#9E9E9E'),
-      pointRadius: ws.map(([w,e])=>e.rank===1?5:3), tension:.25, fill:false }]
+    datasets:[{ data: ws.map(([w,e])=>e.rank), borderColor:tt.ink, borderWidth:2,
+      pointBackgroundColor: ws.map(([w,e])=>e.rank===1?tt.red:'transparent'),
+      pointBorderColor: ws.map(([w,e])=>e.rank===1?tt.red:tt.ink), pointBorderWidth:1.5,
+      pointRadius: ws.map(([w,e])=>e.rank===1?6:3), tension:.25, fill:false }]
   },{ plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'#'+c.parsed.y}} },
-     scales:{ y:{ reverse:true, min:1, max:maxRank, ticks:{ callback:v=>'#'+v } }, x:{ ticks:{ maxTicksLimit:14 } } } });
+     scales:{ y:{ reverse:true, min:1, max:maxRank, grid:{color:tt.grid}, ticks:{ callback:v=>'#'+v } },
+              x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } });
   hydrateThumbs();
   document.querySelector('#view-tracks').scrollIntoView({behavior:'smooth'});
 }
@@ -778,58 +960,62 @@ window.openArtist = function(name){
       labels,
       datasets: top6.map((t,i)=>({ label:t.name,
         data: labels.map((_,ix)=>{const e=entryAt(t,y,ix+1); return e&&e.rank!=null?e.rank:null;}),
-        borderColor:RACE_COLORS[i], backgroundColor:RACE_COLORS[i], borderDash:RACE_DASHES[i], tension:.25, pointRadius:2, spanGaps:false }))
-    },{ plugins:{ legend:{position:'bottom', labels:{color:'#4A4A4A', boxWidth:10, font:{size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+': #'+c.parsed.y}} },
-       scales:{ y:{ reverse:true, min:1, ticks:{callback:v=>'#'+v} }, x:{ ticks:{maxTicksLimit:14} } } });
+        borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length], borderWidth:2.5, tension:.35, pointRadius:0, pointHoverRadius:5, spanGaps:false }))
+    },{ plugins:{ legend:{position:'bottom', labels:{font:{family:'"Nunito Sans", sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
+       scales:{ y:{ reverse:true, min:1, grid:{color:TH().grid}, ticks:{callback:v=>'#'+v} },
+                x:{ grid:{display:false}, ticks:{maxTicksLimit:14} } } });
   }
   hydrateThumbs();
   document.querySelector('#view-tracks').scrollIntoView({behavior:'smooth'});
 }
 
 /* ───────── All-time ───────── */
-let atPage=0, atQuery=''; // phân trang Hall of Fame (100/trang)
-window.atGoPage=function(d){ atPage+=d; renderAllTime(); };
-const AT_SORT_LABEL = { name:'Song', baseline:'Pre-chart', tracked:'On-chart', all:'All-time', peak:'Peak' };
-const AT_SORT_DEFAULT_DIR = { name:'asc', baseline:'desc', tracked:'desc', all:'desc', peak:'asc' };
-const AT_SORT_GETTER = {
-  name: t=>t.name.toLowerCase(),
-  baseline: t=>t.baseline||0,
-  tracked: t=>t.trackedTotal||0,
-  all: t=>t.allTotal||0,
-  peak: t=>t.allPeak, // giữ null -> luôn xếp cuối dù sort chiều nào
-};
-function atSortRows(rows){
-  const get=AT_SORT_GETTER[atSort.key]||AT_SORT_GETTER.all;
-  const dir=atSort.dir;
-  return [...rows].sort((a,b)=>{
-    const va=get(a), vb=get(b);
-    const an=(va==null), bn=(vb==null);
-    if(an&&bn) return 0;
-    if(an) return 1;
-    if(bn) return -1;
-    if(typeof va==='string') return dir==='asc'?va.localeCompare(vb):vb.localeCompare(va);
-    return dir==='asc'?va-vb:vb-va;
-  });
+const AT_SIZE=100;       // Hall of Fame chốt ở top 100 all-time
+// Sort Hall of Fame theo 1 trong 3 cột stream (mặc định All-time ↓); bấm lại cột đang sort -> đổi chiều.
+let atSort='all', atSortDir='desc';
+
+/* ── Lọc Hall of Fame theo vùng của NGHỆ SĨ (Artist.region, tag ở /admin/artists) ──
+   Bài feat nhiều nghệ sĩ khác vùng -> thuộc TẤT CẢ các vùng đó (khớp cách credit stream
+   cho từng nghệ sĩ ở "Top artists"). Không nghệ sĩ nào có region -> 'none' (Untagged). */
+const AT_REGIONS=[{ v:'ASIA', label:'Asia' },{ v:'US-UK', label:'US-UK' },{ v:'OTHER', label:'Other' },{ v:'none', label:'Untagged' }];
+const AT_REGION_LABEL=Object.fromEntries(AT_REGIONS.map(r=>[r.v,r.label]));
+let atRegion='';                       // '' = tất cả các vùng
+const REGION_CACHE=new Map();          // trackId -> Set(region)
+function trackRegions(t){
+  let s=REGION_CACHE.get(t.id);
+  if(s) return s;
+  s=new Set();
+  for(const a of t.artists){ const r=ARTMETA.get(artistKey(a))?.region; if(r) s.add(r); }
+  if(!s.size) s.add('none');
+  REGION_CACHE.set(t.id,s);
+  return s;
 }
-function atUpdateSortHeaders(){
-  for(const key of Object.keys(AT_SORT_LABEL)){
-    const th=$('atTh-'+key); if(!th) continue;
-    const on=atSort.key===key;
-    th.textContent=AT_SORT_LABEL[key]+(on?(atSort.dir==='asc'?' ▲':' ▼'):'');
-    th.classList.toggle('sort-on', on);
+window.setAtRegion=function(v){ atRegion=v||''; renderAllTime(); };
+
+// Vẽ hàng pill vùng + trả về số bài mỗi vùng; vùng đang chọn mà rỗng thì tự về "All".
+function renderAtRegions(list){
+  const n={};
+  for(const t of list) for(const r of trackRegions(t)) n[r]=(n[r]||0)+1;
+  if(atRegion && !n[atRegion]) atRegion='';
+  const box=$('atRegions');
+  if(box){
+    const pill=(v,label,disabled)=>`<button type="button" class="pill${atRegion===v?' on':''}"${disabled?' disabled':''} onclick="setAtRegion('${v}')">${label}</button>`;
+    box.innerHTML = pill('', `All · ${list.length}`) + AT_REGIONS.map(r=>pill(r.v, `${r.label} · ${n[r.v]||0}`, !n[r.v])).join('');
   }
+  return n;
 }
-// Top 9 genre theo tổng stream all-time, phần còn lại gộp vào "Khác"
-const GENRE_COLORS=['#0A0A0A','#242424','#3A3A3A','#4F4F4F','#656565','#7A7A7A','#909090','#A5A5A5','#BABABA','#D6D6D6'];
-function genreBreakdown(list){
-  const sums={};
-  for(const t of list){ const g=(t.genre||'').trim()||'Unknown'; sums[g]=(sums[g]||0)+t.allTotal; }
-  const sorted=Object.entries(sums).sort((a,b)=>b[1]-a[1]);
-  const total=sorted.reduce((s,x)=>s+x[1],0);
-  const rows=sorted.slice(0,9);
-  const restSum=sorted.slice(9).reduce((s,x)=>s+x[1],0);
-  if(restSum>0) rows.push(['Other', restSum]);
-  return { rows, total };
+const AT_SORT_KEY={ pre:t=>t.baseline, on:t=>t.trackedTotal, all:t=>t.allTotal };
+window.setAtSort=function(k){
+  if(!AT_SORT_KEY[k]) return;
+  if(atSort===k) atSortDir = atSortDir==='desc' ? 'asc' : 'desc';
+  else { atSort=k; atSortDir='desc'; }
+  renderAllTime();
+};
+// competition rank trên mảng ĐÃ sắp theo key (giá trị bằng nhau -> cùng hạng)
+function rankMap(arr, key){
+  const m=new Map(); let r=0, prev=null, seen=0;
+  for(const t of arr){ seen++; const v=key(t); if(v!==prev){ r=seen; prev=v; } m.set(t.id,r); }
+  return m;
 }
 function renderAllTime(){
   const list=[...model.tracks.values()].filter(t=>t.allTotal>0);
@@ -840,35 +1026,48 @@ function renderAllTime(){
   const n1=list[0];
   $('atKpis').innerHTML=`
     <div class="kpi"><div class="lbl">Total streams all-time</div><div class="val">${fmt(grand)}</div><div class="note">${fmt(grandBase)} from pre-chart</div></div>
-    <div class="kpi"><div class="lbl">No.1 song all-time</div><div class="val" style="font-size:17px;font-family:var(--display)">${n1?esc(n1.name):'—'}</div><div class="note">${n1?fmt(n1.allTotal)+' streams':''}</div></div>
+    <div class="kpi"><div class="lbl">No.1 song all-time</div><div class="val name">${n1?esc(n1.name):'—'}</div><div class="note">${n1?fmt(n1.allTotal)+' streams':''}</div></div>
     <div class="kpi"><div class="lbl">Songs with data</div><div class="val">${list.length}</div><div class="note">of ${model.tracks.size} songs in catalog</div></div>
     <div class="kpi"><div class="lbl">Artists</div><div class="val">${Object.keys(artists).length}</div><div class="note">years tracked: ${model.yearList.join(', ')}</div></div>`;
 
-  // ── Thống kê theo genre (ngay dưới KPIs) ──
-  renderAllTimeGenres(list, grand);
-  // ── Thống kê theo giới tính nghệ sĩ (Male / Female / Group) ──
-  renderAllTimeGender(list);
+  // ── Phân bố stream theo bài (chọn On-chart / All-time) ──
+  renderAllTimeDist(list);
+  // ── Breakdown ở cuối trang: genre streams / artist theo genre / artist theo gender ──
+  renderAllTimeBreakdown(list, grand);
+
+  // ── Hall of Fame: lọc theo vùng trước, mọi thứ bên dưới tính TRONG vùng đang chọn ──
+  renderAtRegions(list);
+  const pool = atRegion ? list.filter(t=>trackRegions(t).has(atRegion)) : list; // vẫn giữ thứ tự all-time ↓
+  // ── hạng gốc = bảng xếp hạng pre-chart, hạng hiện tại = all-time; cả hai tính trên toàn bộ pool ──
+  const allRankOf=rankMap(pool, AT_SORT_KEY.all);                                  // pool đã sắp all-time ↓
+  const preRankOf=rankMap([...pool].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
+  // Hall of Fame chỉ gồm 100 bài all-time cao nhất; sort các cột chỉ đảo thứ tự trong đúng 100 bài này.
+  const roster=pool.slice(0, AT_SIZE);
+  const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
+  const sorted=[...roster].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
+  const rankOf=rankMap(sorted, key);
+  for(const [k,id] of [['pre','atThPre'],['on','atThOn'],['all','atThAll']]){
+    const th=$(id); if(!th) continue;
+    th.classList.toggle('on', atSort===k);
+    const ar=th.querySelector('.sar'); if(ar) ar.textContent = atSort===k ? (atSortDir==='desc'?'▼':'▲') : '';
+  }
 
   const q=($('atSearch').value||'').trim().toLowerCase();
-  if(q!==atQuery){ atQuery=q; atPage=0; } // đổi từ khoá tìm -> về trang 1
-  let filtered = q ? list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : list;
-  if(atRegion!=='ALL') filtered=filtered.filter(t=>t.region===atRegion);
-  // hạng "#" + "+/-" luôn tính từ `list` gốc (thứ tự all-time cố định) — không đổi khi sort cột / lọc / phân trang.
-  const rankOf=new Map(list.map((t,i)=>[t.id,i+1]));
-  // hạng chỉ theo pre-chart (baseline) — competition rank (baseline bằng nhau -> cùng hạng).
-  const preRankOf=new Map(); { const byBase=[...list].sort((a,b)=>b.baseline-a.baseline); let r=0,prev=null,seen=0;
-    for(const t of byBase){ seen++; if(t.baseline!==prev){ r=seen; prev=t.baseline; } preRankOf.set(t.id,r); } }
-  const sorted=atSortRows(filtered);
-  atUpdateSortHeaders();
-  const size=100, total=sorted.length, pages=Math.max(1,Math.ceil(total/size));
-  if(atPage>=pages) atPage=pages-1; if(atPage<0) atPage=0;
-  const shown=sorted.slice(atPage*size, atPage*size+size);
+  const shown = q ? sorted.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : sorted;
   $('atTable').innerHTML = shown.map((t)=>{
-    const pos=rankOf.get(t.id);
-    const delta=(preRankOf.get(t.id)||pos)-pos; // >0: on-chart đẩy hạng lên so với chỉ pre-chart
-    const mv = delta>0 ? `<span class="mv up">▲${delta}</span>` : delta<0 ? `<span class="mv down">▼${-delta}</span>` : '';
+    // cột đang sort không có số liệu (vd bài chưa có pre-chart) -> "—" thay vì cả dải cùng hạng
+    const pos=key(t)>0 ? rankOf.get(t.id) : null;
+    const allPos=allRankOf.get(t.id);
+    const prePos=t.baseline>0 ? preRankOf.get(t.id) : null;
+    // "+/-" = dịch chuyển hạng pre-chart -> hạng all-time; ngoài top 100 pre-chart mà lọt vào đây -> NEW
+    const isNew = prePos==null || prePos>AT_SIZE;
+    const delta = isNew ? 0 : prePos-allPos;
+    const mv = isNew ? '<span class="mv new">NEW</span>'
+      : delta>0 ? `<span class="mv up">+${delta}</span>`
+      : delta<0 ? `<span class="mv down">-${-delta}</span>`
+      : '<span class="mv eq">=</span>';
     return `<tr>
-      <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
+      <td class="rank r${pos&&pos<=3?pos:''}" style="text-align:center">${pos ?? '<span style="font-size:15px;color:var(--faint)">—</span>'}</td>
       <td style="text-align:center">${mv}</td>
       <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
       <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}${t.region?' · '+esc(t.region):''}</div></td>
@@ -877,124 +1076,328 @@ function renderAllTime(){
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
       <td class="num">${t.allPeak?'#'+t.allPeak:'—'}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion!=='ALL'?'No songs tagged with region '+esc(atRegion)+'.':'No songs found.'}</div></td></tr>`;
+  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion?'No songs tagged with region '+esc(AT_REGION_LABEL[atRegion]||atRegion)+'.':'No songs found.'}</div></td></tr>`;
   const pg=$('atPager');
-  if(pg) pg.innerHTML = total>size ? `
-    <button class="pg" onclick="atGoPage(-1)" ${atPage<=0?'disabled':''}>‹</button>
-    <span>${atPage*size+1}–${Math.min(total,atPage*size+size)} of ${total}</span>
-    <button class="pg" onclick="atGoPage(1)" ${atPage>=pages-1?'disabled':''}>›</button>` : '';
+  if(pg){
+    const scope = atRegion ? ` · ${AT_REGION_LABEL[atRegion]} only (${pool.length} song${pool.length===1?'':'s'} with data)` : '';
+    pg.innerHTML = q ? `<span>${shown.length} of ${roster.length} songs match${scope}</span>`
+                     : scope ? `<span>Top ${roster.length}${scope}</span>` : '';
+  }
 
-  // Genre — top 9 theo % cao nhất, phần còn lại gộp "Khác"
-  const {rows:genreRows, total:genreTotal} = genreBreakdown(list);
-  drawChart('chartAtGenres','doughnut',{
-    labels: genreRows.map(r=>r[0]),
-    datasets:[{ data: genreRows.map(r=>r[1]), backgroundColor:GENRE_COLORS.slice(0,genreRows.length), borderColor:'#EFEFEF', borderWidth:2 }]
-  },{ plugins:{ legend:{ position:'right', labels:{color:'#4A4A4A', boxWidth:12} },
-       tooltip:{ callbacks:{ label:c=>{ const v=c.parsed; const p=genreTotal?Math.round(v/genreTotal*100):0; return c.label+': '+fmt(v)+' stream ('+p+'%)'; } } } } });
-
-  // Top nghệ sĩ all-time — phân trang 10/trang
-  const allArtists=Object.entries(artists).sort((a,b)=>b[1]-a[1]);
-  const totalPages=Math.max(1, Math.ceil(allArtists.length/10));
-  if(atArtistPage>totalPages-1) atArtistPage=totalPages-1;
-  if(atArtistPage<0) atArtistPage=0;
-  const pageArtists=allArtists.slice(atArtistPage*10, atArtistPage*10+10);
+  const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const ta=TH();
   drawChart('chartAtArtists','bar',{
-    labels: pageArtists.map(x=>x[0]),
-    datasets:[{ data: pageArtists.map(x=>x[1]), backgroundColor:'#2E2E2E', borderRadius:0 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true}},
-     onClick:(ev,els)=>{ if(els.length) openArtist(pageArtists[els[0].index][0]); } });
-  $('atArtistPageLabel').textContent = allArtists.length
-    ? `#${atArtistPage*10+1}–${Math.min((atArtistPage+1)*10, allArtists.length)} / ${allArtists.length} nghệ sĩ`
-    : '—';
-  $('atArtistPrev').disabled = atArtistPage<=0;
-  $('atArtistNext').disabled = atArtistPage>=totalPages-1;
-
+    labels: topA.map(x=>x[0]),
+    datasets:[{ data: topA.map(x=>x[1]), backgroundColor: topA.map((_,i)=>i===0?ta.red:ta.mid), barPercentage:.8 }]
+  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmt(c.parsed.x)+' streams'}}},
+     scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:ta.grid} }, y:{ grid:{display:false} } },
+     onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
   hydrateThumbs();
 }
-// Thống kê theo genre: gộp stream + số bài theo thể loại, vẽ thanh tỉ lệ (Unknown xếp cuối).
-function renderAllTimeGenres(list, grand){
-  const gEl=$('atGenres'); if(!gEl) return;
-  const gSub=$('atGenreSub');
-  const byGenre={};
-  for(const t of list){ const g=(t.genre||'').trim()||'Unknown'; if(!byGenre[g]) byGenre[g]={streams:0,songs:0}; byGenre[g].streams+=t.allTotal; byGenre[g].songs++; }
-  const unknown=byGenre['Unknown'];
-  const known=Object.entries(byGenre).filter(([g])=>g!=='Unknown').sort((a,b)=>b[1].streams-a[1].streams);
-  if(!known.length){
-    gEl.innerHTML='<div class="hint" style="margin:0">No genre data yet — songs get a genre in /admin (auto-filled from iTunes when cover art is fetched).</div>';
-    if(gSub) gSub.textContent='';
-    return;
-  }
-  const tagged=list.length-(unknown?unknown.songs:0);
-  if(gSub) gSub.textContent=`${known.length} genre${known.length>1?'s':''} · ${tagged} of ${list.length} songs tagged`;
-  const ordered=unknown?[...known,['Unknown',unknown]]:known;
-  const gMax=Math.max(1,...ordered.map(([,s])=>s.streams));
-  gEl.innerHTML='<div class="gstats">'+ordered.map(([g,s])=>{
-    const isU=g==='Unknown';
-    const pct=grand?Math.round(s.streams/grand*100):0;
-    const w=Math.max(2,Math.round(s.streams/gMax*100));
-    return `<div class="gstat">
-      <span class="gname"${isU?' style="color:var(--faint);font-weight:600"':''}>${esc(g)}</span>
-      <span class="gbar"><i style="width:${w}%${isU?';background:var(--faint)':''}"></i></span>
-      <span class="gval">${s.songs} song${s.songs>1?'s':''} · ${abbr(s.streams)} · ${pct}%</span>
-    </div>`;
-  }).join('')+'</div>';
-}
-// Bảng xếp hạng NGHỆ SĨ theo giới tính: chọn nhóm (Male/Female/Group) -> list nghệ sĩ rank theo total stream.
-// Credit allTotal của mỗi bài cho TỪNG nghệ sĩ (khớp cách gộp "Top artists").
-let atGender=null;          // nhóm đang chọn
-let atGenderData=null;      // {Male:[...], Female:[...], Group:[...]} nghệ sĩ đã xếp hạng
-window.setAtGender=function(g){ atGender=g; drawAtGenderTable(); };
+/* ───────── All-time · Phân bố stream ─────────
+   Histogram: mỗi cột = số BÀI trong 1 bin rộng 100.000.000 stream, bin i = [i·100M, (i+1)·100M).
+   Số bin chạy tới bài cao nhất của chế độ đang chọn. */
+const AT_DIST_BIN=1e8;
+const AT_DIST_MODES={ on:{ label:'On-chart', key:t=>t.trackedTotal }, all:{ label:'All-time', key:t=>t.allTotal } };
+let atDistMode='all', atDistList=null;
+window.setAtDist=function(m){ if(!AT_DIST_MODES[m]) return; atDistMode=m; drawAtDist(); };
 
-function renderAllTimeGender(list){
-  const box=$('atGenderStats'), sub=$('atGenderSub'); if(!box) return;
+function renderAllTimeDist(list){ atDistList=list; drawAtDist(); }
+
+function drawAtDist(){
+  if(!atDistList || !$('chartAtDist')) return;
+  const mode=AT_DIST_MODES[atDistMode], key=mode.key;
+  const vals=atDistList.map(key).sort((a,b)=>a-b);
+  const max=vals[vals.length-1]||0;
+  const nBins=Math.max(1, Math.floor(max/AT_DIST_BIN)+1);
+  const counts=new Array(nBins).fill(0);
+  for(const v of vals) counts[Math.min(nBins-1, Math.floor(v/AT_DIST_BIN))]++;
+  const tabs=$('atDistTabs');
+  if(tabs) tabs.innerHTML=Object.entries(AT_DIST_MODES).map(([k,m])=>
+    `<button type="button" class="pill${k===atDistMode?' on':''}" onclick="setAtDist('${k}')">${m.label}</button>`).join('');
+  const sub=$('atDistSub');
+  if(sub){
+    const n=vals.length, med=n?vals[n>>1]:0;
+    let zero=0; while(zero<n && vals[zero]===0) zero++; // vals đã sắp tăng dần
+    sub.textContent=`${n} songs · ${nBins} bins of ${abbr(AT_DIST_BIN)} · median ${abbr(med)} · max ${abbr(max)}${zero?` · ${zero} at zero`:''}`;
+  }
+  const total=vals.length||1;
+  const edge=i=>i*AT_DIST_BIN;
+  const td=TH();
+  drawChart('chartAtDist','bar',{
+    labels: counts.map((_,i)=>abbr(edge(i))),
+    datasets:[{ data: counts, backgroundColor:td.red }]
+  },{ plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{
+          title:c=>`${abbr(edge(c[0].dataIndex))} – ${abbr(edge(c[0].dataIndex+1))} streams`,
+          label:c=>`${c.parsed.y} song${c.parsed.y===1?'':'s'} · ${(c.parsed.y/total*100).toFixed(1)}% (${mode.label})` } } },
+      scales:{ y:{ beginAtZero:true, grid:{color:td.grid}, ticks:{precision:0},
+                   title:{display:true, text:'SONGS', color:td.mid, font:{family:'"JetBrains Mono", monospace', size:9}} },
+               x:{ grid:{display:false}, ticks:{ autoSkip:true, maxTicksLimit:16, maxRotation:0 },
+                   title:{display:true, text:`STREAMS — BIN ${abbr(AT_DIST_BIN)}`, color:td.mid, font:{family:'"JetBrains Mono", monospace', size:9}} } },
+      datasets:{ bar:{ categoryPercentage:1, barPercentage:.92 } } });
+}
+
+/* ───────── All-time · Breakdown (gộp 3 bảng vào 1 panel, chọn type để show) ─────────
+   type: genre        -> tổng stream + số bài theo thể loại (thanh tỉ lệ, Unknown xếp cuối)
+         artistGenre  -> xếp hạng nghệ sĩ TRONG 1 thể loại (filter chọn thể loại)
+         artistGender -> xếp hạng nghệ sĩ theo Male / Female / Group
+   Mọi bảng phân trang 10 dòng/trang. */
+const AT_BREAK_SIZE=10;
+let atBreakType='genre';   // type đang chọn
+let atBreakGenre=null;     // thể loại đang chọn (artistGenre)
+let atGender=null;         // nhóm giới tính đang chọn (artistGender)
+let atBreakPage=0;
+let atBreakData=null;      // số liệu đã gộp sẵn — đổi filter/trang thì chỉ vẽ lại, không tính lại
+// chuỗi an toàn khi nhét vào onclick="fn('…')" — escape cho JS trước, cho HTML sau
+const jsStr=s=>esc(String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+
+window.setAtBreakType=function(v){ atBreakType=v; atBreakPage=0; drawAtBreakdown(); };
+window.setAtBreakGenre=function(i){ const g=atBreakData?.genres[i]; if(g) atBreakGenre=g[0]; atBreakPage=0; drawAtBreakdown(); };
+window.setAtGender=function(g){ atGender=g; atBreakPage=0; drawAtBreakdown(); };
+window.atBreakGoPage=function(d){ atBreakPage+=d; drawAtBreakdown(); };
+
+// Gộp số liệu 1 lượt: stream/bài theo genre, nghệ sĩ theo genre, nghệ sĩ theo gender.
+// allTotal của mỗi bài được credit cho TỪNG nghệ sĩ (khớp cách gộp "Top artists").
+function renderAllTimeBreakdown(list, grand){
+  const box=$('atBreakdown'); if(!box) return;
   const GK={ male:'Male', female:'Female', group:'Group' };
-  const agg=new Map(); // artistKey -> { name, gender, streams, songs:Set }
+  const byGenre={};                 // genre -> { streams, songs }
+  const artistsIn=new Map();        // genre -> Map(key -> { name, streams, songs:Set })
+  const byArtist=new Map();         // key   -> { name, gender, streams, songs:Set }
   const untagged=new Set();
   for(const t of list){
+    const g=(t.genre||'').trim()||'Unknown';
+    if(!byGenre[g]) byGenre[g]={ streams:0, songs:0 };
+    byGenre[g].streams+=t.allTotal; byGenre[g].songs++;
+    let m=artistsIn.get(g); if(!m){ m=new Map(); artistsIn.set(g,m); }
     for(const a of t.artists){
-      const key=artistKey(a); const label=GK[ARTMETA.get(key)?.gender];
-      if(!label){ untagged.add(key); continue; }
-      let e=agg.get(key); if(!e){ e={ name:a, gender:label, streams:0, songs:new Set() }; agg.set(key,e); }
+      const key=artistKey(a);
+      let e=m.get(key); if(!e){ e={ name:a, streams:0, songs:new Set() }; m.set(key,e); }
       e.streams+=t.allTotal; e.songs.add(t.id);
+      const label=GK[ARTMETA.get(key)?.gender];
+      if(!label){ untagged.add(key); continue; }
+      let x=byArtist.get(key); if(!x){ x={ name:a, gender:label, streams:0, songs:new Set() }; byArtist.set(key,x); }
+      x.streams+=t.allTotal; x.songs.add(t.id);
     }
   }
-  atGenderData={ Male:[], Female:[], Group:[] };
-  for(const e of agg.values()) atGenderData[e.gender].push(e);
-  for(const k of ['Male','Female','Group']) atGenderData[k].sort((a,b)=>b.streams-a.streams);
+  const unknown=byGenre['Unknown'];
+  const known=Object.entries(byGenre).filter(([g])=>g!=='Unknown').sort((a,b)=>b[1].streams-a[1].streams);
+  const genres=unknown?[...known,['Unknown',unknown]]:known;
+  const gender={ Male:[], Female:[], Group:[] };
+  for(const e of byArtist.values()) gender[e.gender].push(e);
+  for(const k of ['Male','Female','Group']) gender[k].sort((a,b)=>b.streams-a.streams);
+  const artistByGenre=new Map();
+  for(const [g,m] of artistsIn) artistByGenre.set(g, [...m.values()].sort((a,b)=>b.streams-a.streams));
 
-  const tagged=agg.size;
-  if(!tagged){
-    if(sub) sub.textContent='';
-    box.innerHTML='<div class="hint" style="margin:0">No artist gender data yet — tag artists in <strong>/admin/artists</strong> (Male / Female / Group).</div>';
-    return;
-  }
-  if(sub) sub.textContent=`${tagged} artist${tagged>1?'s':''} tagged${untagged.size?` · ${untagged.size} untagged`:''}`;
-  // mặc định chọn nhóm đông nghệ sĩ nhất (nếu nhóm đang chọn rỗng)
-  if(!atGender || !atGenderData[atGender]?.length){
-    atGender=['Male','Female','Group'].sort((a,b)=>atGenderData[b].length-atGenderData[a].length)[0];
-  }
-  drawAtGenderTable();
+  atBreakData={ genres, genreCount:known.length, grand,
+    songs:list.length, taggedSongs:list.length-(unknown?unknown.songs:0),
+    artistByGenre, gender, taggedArtists:byArtist.size, untagged:untagged.size };
+
+  // mặc định: thể loại nhiều stream nhất / nhóm đông nghệ sĩ nhất
+  const gKeys=genres.map(([g])=>g);
+  if(!atBreakGenre || !gKeys.includes(atBreakGenre)) atBreakGenre=gKeys[0]||null;
+  if(!atGender || !gender[atGender].length) atGender=['Male','Female','Group'].sort((a,b)=>gender[b].length-gender[a].length)[0];
+
+  const sel=$('atBreakType');
+  if(sel && !sel.dataset.bound){ sel.dataset.bound='1'; sel.onchange=()=>window.setAtBreakType(sel.value); }
+  drawAtBreakdown();
 }
-// Vẽ toggle nhóm + bảng nghệ sĩ của nhóm đang chọn (không tính lại số liệu).
-function drawAtGenderTable(){
-  const box=$('atGenderStats'); if(!box||!atGenderData) return;
-  const tabs=['Male','Female','Group'].map(k=>{
-    const n=atGenderData[k].length; const on=k===atGender;
-    return `<button type="button" class="pill${on?' on':''}" ${n?'':'disabled'} onclick="setAtGender('${k}')">${k} · ${n}</button>`;
-  }).join('');
-  const rows=atGenderData[atGender]||[];
-  const body=rows.length ? rows.map((r,i)=>`<tr>
-      <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
-      <td class="clickable" onclick="openArtist('${escAttr(r.name)}')">${esc(r.name)}</td>
-      <td class="num">${r.songs.size}</td>
-      <td class="num" style="color:var(--gold);font-weight:700">${fmt(r.streams)}</td>
-    </tr>`).join('') : '<tr><td colspan="4"><div class="empty">No tagged artists in this group.</div></td></tr>';
-  box.innerHTML=`<div class="pill-row">${tabs}</div>
-    <table>
+
+// Vẽ filter + bảng của type đang chọn (không tính lại số liệu).
+function drawAtBreakdown(){
+  const box=$('atBreakdown'), sub=$('atBreakSub'); if(!box||!atBreakData) return;
+  const d=atBreakData;
+  const sel=$('atBreakType'); if(sel && sel.value!==atBreakType) sel.value=atBreakType;
+
+  const pill=(label,on,call,disabled)=>`<button type="button" class="pill${on?' on':''}" ${disabled?'disabled':''} onclick="${call}">${label}</button>`;
+  let filter='', total=0, note='', body='', hint='';
+
+  if(atBreakType==='genre'){
+    note=`${d.genreCount} genre${d.genreCount>1?'s':''} · ${d.taggedSongs} of ${d.songs} songs tagged`;
+    if(!d.genreCount){
+      body='<div class="hint" style="margin:0">No genre data yet — songs get a genre in /admin (auto-filled from iTunes when cover art is fetched).</div>';
+    }else{
+      total=d.genres.length;
+      const gMax=Math.max(1,...d.genres.map(([,s])=>s.streams));
+      body='<div class="gstats">'+slice(d.genres,total).map(([g,s])=>{
+        const isU=g==='Unknown';
+        const pct=d.grand?Math.round(s.streams/d.grand*100):0;
+        const w=Math.max(2,Math.round(s.streams/gMax*100));
+        return `<div class="gstat">
+          <span class="gname"${isU?' style="color:var(--faint);font-weight:600"':''}>${esc(g)}</span>
+          <span class="gbar"><i style="width:${w}%${isU?';background:var(--faint)':''}"></i></span>
+          <span class="gval">${s.songs} song${s.songs>1?'s':''} · ${abbr(s.streams)} · ${pct}%</span>
+        </div>`;
+      }).join('')+'</div>';
+      hint='Share of all-time streams by genre. "Unknown" = songs with no genre tagged yet.';
+    }
+  }else if(atBreakType==='artistGenre'){
+    const rows=(atBreakGenre && d.artistByGenre.get(atBreakGenre))||[];
+    note=atBreakGenre?`${atBreakGenre} · ${rows.length} artist${rows.length>1?'s':''}`:'';
+    if(!d.genres.length){
+      body='<div class="hint" style="margin:0">No songs with streams yet.</div>';
+    }else{
+      filter=`<div class="pill-row">${d.genres.map(([g,s],i)=>pill(`${esc(g)} · ${s.songs}`, g===atBreakGenre, `setAtBreakGenre(${i})`)).join('')}</div>`;
+      total=rows.length;
+      body=artistTable(slice(rows,total), 'No artists in this genre.');
+      hint='Artists ranked by all-time streams inside the selected genre — every artist on a song gets its full stream count.';
+    }
+  }else{
+    note=`${d.taggedArtists} artist${d.taggedArtists>1?'s':''} tagged${d.untagged?` · ${d.untagged} untagged`:''}`;
+    if(!d.taggedArtists){
+      body='<div class="hint" style="margin:0">No artist gender data yet — tag artists in <strong>/admin/artists</strong> (Male / Female / Group).</div>';
+      note='';
+    }else{
+      const rows=d.gender[atGender]||[];
+      filter=`<div class="pill-row">${['Male','Female','Group'].map(k=>pill(`${k} · ${d.gender[k].length}`, k===atGender, `setAtGender('${k}')`, !d.gender[k].length)).join('')}</div>`;
+      total=rows.length;
+      body=artistTable(slice(rows,total), 'No tagged artists in this group.');
+      hint='Artists ranked by all-time streams within the selected group.';
+    }
+  }
+
+  if(sub) sub.textContent=note;
+  box.innerHTML=filter+body+pager(total)+(hint?`<div class="hint">${hint}</div>`:'');
+
+  // ── helpers dùng chung state phân trang ──
+  function pages(total){ return Math.max(1,Math.ceil(total/AT_BREAK_SIZE)); }
+  function slice(arr,total){
+    const p=pages(total);
+    if(atBreakPage>=p) atBreakPage=p-1;
+    if(atBreakPage<0) atBreakPage=0;
+    return arr.slice(atBreakPage*AT_BREAK_SIZE, atBreakPage*AT_BREAK_SIZE+AT_BREAK_SIZE);
+  }
+  function pager(total){
+    if(total<=AT_BREAK_SIZE) return '';
+    const p=pages(total);
+    return `<div class="race-pager" style="margin-top:12px">
+      <button class="pg" onclick="atBreakGoPage(-1)" ${atBreakPage<=0?'disabled':''}>‹</button>
+      <span>${atBreakPage*AT_BREAK_SIZE+1}–${Math.min(total,atBreakPage*AT_BREAK_SIZE+AT_BREAK_SIZE)} of ${total}</span>
+      <button class="pg" onclick="atBreakGoPage(1)" ${atBreakPage>=p-1?'disabled':''}>›</button>
+    </div>`;
+  }
+  function artistTable(rows, emptyMsg){
+    const off=atBreakPage*AT_BREAK_SIZE;
+    const body=rows.length ? rows.map((r,i)=>{
+      const pos=off+i+1;
+      return `<tr>
+        <td class="rank r${pos<=3?pos:''}" style="text-align:center">${pos}</td>
+        <td class="clickable" onclick="openArtist('${jsStr(r.name)}')">${esc(r.name)}</td>
+        <td class="num">${r.songs.size}</td>
+        <td class="num" style="color:var(--gold);font-weight:700">${fmt(r.streams)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4"><div class="empty">${emptyMsg}</div></td></tr>`;
+    return `<table>
       <thead><tr><th style="text-align:center">#</th><th>Artist</th><th style="text-align:right">Songs</th><th style="text-align:right">Total streams</th></tr></thead>
       <tbody>${body}</tbody>
     </table>`;
+  }
 }
+/* ───────── Awards ─────────
+   Mỗi bản ghi = 1 đề cử (won=true -> thắng) trong 1 hạng mục của 1 năm.
+   subject: type='track' -> trackId (tên tra từ model), type='artist' -> artistKey (tên dùng name đã lưu). */
+let awYear=null;
+window.setAwYear=function(y){ awYear=+y; renderAwards(); };
+
+function awardSubject(a){
+  if(a.type==='track'){
+    const t=model.tracks.get(a.subject);
+    return { label:t?t.name:(a.name||a.subject), sub:t?t.artist:'', track:t||null, gone:!t };
+  }
+  return { label:a.name||a.subject, sub:'Artist', track:null, gone:false };
+}
+// mở bài hát / nghệ sĩ tương ứng khi bấm 1 dòng award
+window.openAward=function(type, subject, name){
+  if(type==='track'){ if(model.tracks.has(subject)) openTrack(subject); else toast('This song is no longer in the catalog'); return; }
+  openArtist(name);
+};
+
+function renderAwards(){
+  const all=DATA.awards||[];
+  const years=[...new Set(all.map(a=>+a.year))].sort((a,b)=>b-a);
+  if(!years.length){
+    $('awKpis').innerHTML='';
+    $('awYears').innerHTML='';
+    $('awSub').textContent='';
+    $('awList').innerHTML='<div class="empty">No awards recorded yet — add them in <strong>/admin/awards</strong>.</div>';
+    $('awHonoursPanel').style.display='none';
+    return;
+  }
+  $('awHonoursPanel').style.display='';
+  if(awYear==null || !years.includes(awYear)) awYear = years.includes(currentYear) ? currentYear : years[0];
+
+  const ofYear=all.filter(a=>+a.year===awYear);
+  const cats=new Map();
+  for(const a of ofYear){ if(!cats.has(a.category)) cats.set(a.category,[]); cats.get(a.category).push(a); }
+  for(const rows of cats.values()) rows.sort((x,y)=>(y.won?1:0)-(x.won?1:0) || String(x.name).localeCompare(String(y.name)));
+  const ordered=[...cats.entries()].sort((a,b)=>a[0].localeCompare(b[0]));
+  const wins=ofYear.filter(a=>a.won);
+
+  // ── KPI ──
+  const topWinner=(()=>{ const m=new Map();
+    for(const a of wins){ const k=a.type+':'+a.subject; m.set(k,(m.get(k)||0)+1); }
+    let best=null; for(const [k,n] of m) if(!best||n>best.n) best={k,n};
+    if(!best) return null;
+    const a=wins.find(x=>x.type+':'+x.subject===best.k);
+    return { name:awardSubject(a).label, n:best.n };
+  })();
+  $('awKpis').innerHTML=`
+    <div class="kpi"><div class="lbl">Categories in ${awYear}</div><div class="val">${ordered.length}</div><div class="note">${ofYear.length} nomination${ofYear.length===1?'':'s'} total</div></div>
+    <div class="kpi"><div class="lbl">Titles awarded</div><div class="val">${wins.length}</div><div class="note">${ordered.length-wins.length} still undecided</div></div>
+    <div class="kpi"><div class="lbl">Most titles in ${awYear}</div><div class="val name">${topWinner?esc(topWinner.name):'—'}</div><div class="note">${topWinner?topWinner.n+' win'+(topWinner.n===1?'':'s'):''}</div></div>
+    <div class="kpi"><div class="lbl">Years on record</div><div class="val">${years.length}</div><div class="note">${years.join(', ')}</div></div>`;
+
+  $('awYears').innerHTML=years.map(y=>`<button type="button" class="pill${y===awYear?' on':''}" onclick="setAwYear(${y})">${y}</button>`).join('');
+  $('awSub').textContent=`${ordered.length} categor${ordered.length===1?'y':'ies'} · ${wins.length} winner${wins.length===1?'':'s'}`;
+
+  $('awList').innerHTML = ordered.map(([cat,rows])=>{
+    const body=rows.map(a=>{
+      const s=awardSubject(a);
+      const cls=a.won?'aw-row win':'aw-row';
+      return `<div class="${cls}" onclick="openAward('${a.type}','${jsStr(a.subject)}','${jsStr(s.label)}')">
+        <span class="aw-mark">${a.won?'🏆':'·'}</span>
+        ${a.type==='track'&&s.track?`<span class="aw-thumb">${thumbHTML(s.track)}</span>`:''}
+        <span class="aw-name">${esc(s.label)}${s.gone?'<span class="gtag">removed</span>':''}
+          ${s.sub?`<span class="aw-sub">${esc(s.sub)}</span>`:''}</span>
+        ${a.note?`<span class="aw-note">${esc(a.note)}</span>`:''}
+        <span class="aw-tag">${a.won?'winner':'nominee'}</span>
+      </div>`;
+    }).join('');
+    return `<div class="aw-cat">
+      <div class="aw-cat-head">${esc(cat)}${rows.some(r=>r.won)?'':'<span class="aw-pending">no winner yet</span>'}</div>
+      ${body}
+    </div>`;
+  }).join('');
+
+  renderAwardHonours(all);
+  hydrateThumbs();
+}
+
+// Bảng "most decorated" trên TẤT CẢ các năm: đếm win + tổng đề cử cho mỗi đối tượng.
+function renderAwardHonours(all){
+  const box=$('awHonours'); if(!box) return;
+  const m=new Map(); // type:subject -> { label, sub, type, subject, wins, noms, years:Set }
+  for(const a of all){
+    const k=a.type+':'+a.subject;
+    let e=m.get(k);
+    if(!e){ const s=awardSubject(a); e={ label:s.label, sub:s.sub, type:a.type, subject:a.subject, wins:0, noms:0, years:new Set() }; m.set(k,e); }
+    e.noms++; if(a.won) e.wins++; e.years.add(+a.year);
+  }
+  const rows=[...m.values()].sort((x,y)=>y.wins-x.wins || y.noms-x.noms || x.label.localeCompare(y.label)).slice(0,15);
+  const sub=$('awHonoursSub');
+  if(sub) sub.textContent=`${m.size} song${m.size===1?'':'s'} & artists nominated`;
+  box.innerHTML=`<table>
+    <thead><tr><th style="text-align:center">#</th><th>Song / artist</th><th>Years</th><th style="text-align:right">Wins</th><th style="text-align:right">Noms</th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr class="clickable" onclick="openAward('${r.type}','${jsStr(r.subject)}','${jsStr(r.label)}')">
+      <td class="rank r${i<3?i+1:''}" style="text-align:center">${i+1}</td>
+      <td><div class="t-name">${esc(r.label)}</div>${r.sub?`<div class="t-artist">${esc(r.sub)}</div>`:''}</td>
+      <td class="muted" style="font-family:var(--mono);font-size:11.5px">${[...r.years].sort((a,b)=>a-b).join(', ')}</td>
+      <td class="num" style="color:var(--gold);font-weight:700">${r.wins}</td>
+      <td class="num">${r.noms}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
 /* ───────── tiện ích danh mục (gợi ý cho ô So sánh 1-vs-1) ───────── */
 function fillTrackOptions(){
   const dl=$('trackOptions'); if(!dl) return;
@@ -1017,9 +1420,6 @@ function findTrackByLabel(label){
 }
 
 /* ───────── chart helper ───────── */
-Chart.defaults.color='#5A5A5A';
-Chart.defaults.borderColor='rgba(10,10,10,.10)';
-Chart.defaults.font.family='"Libre Franklin", system-ui, sans-serif';
 function drawChart(id,type,data,options,plugins){
   if(charts[id]){ charts[id].destroy(); delete charts[id]; }
   const ctx=$(id); if(!ctx) return;
@@ -1075,6 +1475,7 @@ function switchView(v){
   if(v==='chart') renderChartView();
   if(v==='analytics') renderAnalytics();
   if(v==='alltime') renderAllTime();
+  if(v==='awards') renderAwards();
   if(v==='tracks') renderTrackList();
 }
 function refreshAll(){
@@ -1083,6 +1484,7 @@ function refreshAll(){
   if(active==='chart') renderChartView();
   if(active==='analytics') renderAnalytics();
   if(active==='alltime') renderAllTime();
+  if(active==='awards') renderAwards();
   if(active==='tracks') renderTrackList();
 }
 
@@ -1098,25 +1500,10 @@ $('cmpBtn').onclick=runCompare;
 $('debutAddBtn').onclick=addDebutSong;
 $('debutAdd').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addDebutSong(); } });
 $('atSearch').oninput=()=>renderAllTime();
-$('atRegionFilter').addEventListener('click', e=>{
-  const p=e.target.closest('.pill'); if(!p) return;
-  atRegion=p.dataset.region;
-  atPage=0;
-  document.querySelectorAll('#atRegionFilter .pill').forEach(el=>el.classList.toggle('on', el===p));
-  renderAllTime();
-});
-$('atTableEl').querySelector('thead').addEventListener('click', e=>{
-  const th=e.target.closest('th[data-sort]'); if(!th) return;
-  const k=th.dataset.sort;
-  if(atSort.key===k) atSort.dir = atSort.dir==='asc'?'desc':'asc';
-  else atSort = { key:k, dir:AT_SORT_DEFAULT_DIR[k]||'desc' };
-  atPage=0;
-  renderAllTime();
-});
-$('atArtistPrev').onclick=()=>{ if(atArtistPage>0){ atArtistPage--; renderAllTime(); } };
-$('atArtistNext').onclick=()=>{ atArtistPage++; renderAllTime(); };
+$('themeBtn').onclick=()=>setTheme(isDark()?'light':'dark');
 
 (async function init(){
+  themeLabel();
   try{
     await loadData();
     buildArtCache();

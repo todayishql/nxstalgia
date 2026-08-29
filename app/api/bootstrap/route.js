@@ -3,6 +3,7 @@ import Track from '@/models/Track';
 import Entry from '@/models/Entry';
 import Settings from '@/models/Settings';
 import Artist from '@/models/Artist';
+import Award from '@/models/Award';
 import { handle, json } from '@/lib/api';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // Thống kê (peak/total/streak/woc) KHÔNG lưu — client tự tính từ entries.
 export const GET = handle(async () => {
   await dbConnect();
-  const [settings, tracks, entries, artists] = await Promise.all([
+  const [settings, tracks, entries, artists, awards] = await Promise.all([
     Settings.findById('config').lean(),
     Track.find({}, { createdAt: 0, updatedAt: 0, __v: 0 }).lean(),
     Entry.find({}, { _id: 0, year: 1, week: 1, trackId: 1, rank: 1, stream: 1 })
@@ -21,6 +22,10 @@ export const GET = handle(async () => {
     // chỉ nghệ sĩ đã gán ít nhất 1 thuộc tính -> map key -> {gender, region, genres}
     Artist.find({ $or: [{ gender: { $nin: ['', null] } }, { region: { $nin: ['', null] } }] },
       { _id: 1, gender: 1, region: 1, genres: 1 }).lean(),
+    // giải thưởng theo năm; viewer tự tra tên bài hát từ tracks, nghệ sĩ dùng name đã lưu
+    Award.find({}, { _id: 0, year: 1, category: 1, type: 1, subject: 1, name: 1, won: 1, note: 1 })
+      .sort({ year: -1, category: 1, won: -1 })
+      .lean(),
   ]);
 
   return json({
@@ -28,5 +33,6 @@ export const GET = handle(async () => {
     tracks: tracks.map((t) => ({ id: t._id, ...t, _id: undefined })),
     entries,
     artists: artists.map((a) => ({ key: a._id, gender: a.gender || '', region: a.region || '', genres: a.genres || [] })),
+    awards,
   });
 });
