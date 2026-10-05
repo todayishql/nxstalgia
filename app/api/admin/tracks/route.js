@@ -8,6 +8,9 @@ import { songKey, makeIdGen } from '@/lib/songid';
 
 export const runtime = 'nodejs';
 
+// Thoát ký tự đặc biệt của regex -> gõ "(", "." ... trong ô tìm kiếm không làm vỡ RegExp.
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // GET /api/admin/tracks?q=&limit=&skip=  -> danh sách track. all=1 -> trả tất cả (cho export CSV).
 export const GET = handle(async (req) => {
   await requireAuth();
@@ -23,9 +26,8 @@ export const GET = handle(async (req) => {
   const sortKey = SORTABLE[searchParams.get('sort')] || 'name';
   const dir = searchParams.get('dir') === 'desc' ? -1 : 1;
 
-  const filter = q
-    ? { $or: [{ name: new RegExp(q, 'i') }, { artist: new RegExp(q, 'i') }, { _id: q }] }
-    : {};
+  const rx = q ? new RegExp(escapeRegex(q), 'i') : null;
+  const filter = rx ? { $or: [{ name: rx }, { artist: rx }, { _id: q }] } : {};
   let query = Track.find(filter).sort({ [sortKey]: dir, _id: 1 });
   if (!all) query = query.skip(skip).limit(limit);
   const [items, total] = await Promise.all([query.lean(), Track.countDocuments(filter)]);
