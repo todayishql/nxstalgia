@@ -226,6 +226,7 @@ export default function TracksPage() {
       if (rows.length < 2) { flash('err', 'CSV has no data rows.'); return; }
       const H = rows[0].map((h) => h.trim().toLowerCase());
       const find = (aliases) => H.findIndex((h) => aliases.includes(h));
+      const iId = find(['track_id', 'id']);
       const iName = find(['track_name', 'name', 'song', 'title']);
       const iArtist = find(['artist', 'full_artists', 'artists', 'artist_name']);
       const iBase = find(['baseline', 'past_streams', 'past streams', 'baseline_streams']);
@@ -233,6 +234,7 @@ export default function TracksPage() {
       const iArt = find(['artwork_url', 'track_img', 'image', 'cover', 'cover_art']);
       if (iName < 0 || iArtist < 0) { flash('err', 'CSV must have "track_name" and "artist" columns.'); return; }
       const payload = rows.slice(1).map((r) => ({
+        id: iId >= 0 ? r[iId] : '', // khớp track_id có sẵn -> UPDATE bài đó thay vì tạo mới (vd export rồi sửa rồi import lại)
         name: r[iName], artist: r[iArtist],
         baseline: iBase >= 0 ? r[iBase] : '',
         genre: iGenre >= 0 ? r[iGenre] : '',
@@ -240,7 +242,7 @@ export default function TracksPage() {
       })).filter((x) => (x.name || '').trim() && (x.artist || '').trim());
       if (!payload.length) { flash('err', 'No valid rows found in CSV.'); return; }
       const res = await api('/api/admin/tracks/import', { method: 'POST', body: { rows: payload } });
-      flash('ok', `Imported ${res.added} new songs · ${res.skippedDuplicate} duplicates skipped${res.skippedInvalid ? ` · ${res.skippedInvalid} invalid` : ''}.`);
+      flash('ok', `Imported ${res.added} new song${res.added === 1 ? '' : 's'}${res.updated ? ` · ${res.updated} updated` : ''} · ${res.skippedDuplicate} duplicates skipped${res.skippedInvalid ? ` · ${res.skippedInvalid} invalid` : ''}.`);
       setSelected(new Set()); load();
     } catch (err) { flash('err', err.message); }
     finally { setBusy(false); }
@@ -429,6 +431,8 @@ export default function TracksPage() {
           Bulk add via <strong>Paste list</strong> (one song per line: name, artist, baseline, genre) or <strong>upload CSV</strong>
           (columns <code>track_name</code>, <code>artist</code> required; <code>baseline</code>, <code>genre</code>, <code>artwork_url</code> optional).
           New songs get an auto-generated ID; rows matching an existing song (same name + artist) are skipped.
+          <br />
+          <strong>Update existing songs via CSV:</strong> export, edit the values, then upload it back — rows whose <code>track_id</code> matches an existing song are <strong>updated</strong> (not duplicated); rows without a matching <code>track_id</code> follow the add rules above.
           <br />
           <strong>Quick-fill genre:</strong> leave it blank and it auto-fills from iTunes when cover art is fetched (Dashboard → “Fetch artwork”), or tick songs and use <em>Set genre for N</em> above.
         </p>
