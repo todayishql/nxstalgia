@@ -529,9 +529,10 @@ function renderAnalytics(){
   const y=currentYear;
   $('recYear').textContent=y;
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
+  renderTop100(); // "Top 100 streams" — độc lập với năm có dữ liệu hay không (chế độ All time có thể vẫn có)
   if(!charted.length){
     $('records').innerHTML='<div class="empty">No data yet for this year.</div>';
-    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut','chartTop100'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
+    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
     if($('champStats')) $('champStats').innerHTML='<div class="empty">No #1 songs yet.</div>';
     if($('champCarousel')) $('champCarousel').innerHTML='';
     if($('debutChips')) $('debutChips').innerHTML='';
@@ -558,7 +559,6 @@ function renderAnalytics(){
     <div class="record"><div class="rl">Most No.1 songs</div><div class="rv">${topNo1?esc(topNo1[0]):'—'}</div><div class="rd">${topNo1?topNo1[1]+' songs reached #1':''}</div></div>
     <div class="record"><div class="rl">Debut straight at No.1</div><div class="rv">${nDebut1} songs</div><div class="rd">debuted at #1</div></div>`;
 
-  renderTop100(charted, S); // "Top 100 streams this season"
   renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
   renderDebutRace(); // "Ranking Since On-Chart" — trajectory tính từ tuần đầu tiên on-chart (liên tục, xuyên năm)
 
@@ -606,20 +606,87 @@ function renderAnalytics(){
   renderPrediction(y);
 }
 
-/* Top 100 bài stream nhiều nhất của season đang chọn — thanh ngang, cuộn dọc (tối đa 100 hàng). */
-function renderTop100(charted, S){
-  const topS=[...charted].sort((a,b)=>S(b).total-S(a).total).slice(0,100);
-  const TC=TH();
-  const box=$('top100Box');
-  if(box) box.style.height=Math.max(320, topS.length*22)+'px'; // mỗi bài ~22px để tên không chồng nhau
-  drawChart('chartTop100','bar',{
-    labels: topS.map(t=>t.name),
-    datasets:[{ data: topS.map(t=>S(t).total), backgroundColor: topS.map((_,i)=>i===0?TC.red:TC.mid), barPercentage:.75, categoryPercentage:.85 }]
-  },{ indexAxis:'y',
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>fmt(c.parsed.x)+' streams · '+topS[c.dataIndex].artist } } },
-      scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid} },
-               y:{ grid:{display:false}, ticks:{ autoSkip:false, font:{size:10} } } },
-      onClick:(ev,els)=>{ if(els.length) openTrack(topS[els[0].index].id); } });
+/* Top 100 streams — bảng kèm cover art, 2 chế độ:
+   'season' = chỉ 1 cột streams của season đang chọn (theo dropdown Season ở header);
+   'all'    = cột Pre-chart + 1 cột mỗi năm (model.yearList) + Total, sort theo bất kỳ cột nào
+              (kể cả Song/Artist) — click lại cùng cột để đảo chiều; click cột số khác sẽ CHỌN LẠI
+              top 100 theo đúng cột đó (giống quy ước Hall of Fame ở tab All-time). */
+let top100State={ mode:'season', sortKey:'season', sortDir:'desc' };
+function top100Columns(){
+  const cols=[{key:'name', label:'Song', type:'str'}, {key:'artist', label:'Artist', type:'str'}];
+  if(top100State.mode==='all'){
+    cols.push({key:'pre', label:'Pre-chart', type:'num'});
+    for(const yr of model.yearList) cols.push({key:'y'+yr, label:String(yr), type:'num'});
+    cols.push({key:'total', label:'Total', type:'num'});
+  } else cols.push({key:'season', label:'Streams', type:'num'});
+  return cols;
+}
+function top100Value(t, key, y){
+  if(key==='name') return t.name;
+  if(key==='artist') return t.artist;
+  if(key==='season') return statsFor(t,y).total;
+  if(key==='pre') return t.baseline||0;
+  if(key==='total') return t.allTotal||0;
+  if(key[0]==='y') return statsFor(t, +key.slice(1)).total;
+  return 0;
+}
+window.setTop100Mode=function(mode){
+  if(top100State.mode===mode) return;
+  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc' };
+  renderTop100();
+};
+window.setTop100Sort=function(key){
+  const st=top100State;
+  if(st.sortKey===key) st.sortDir = st.sortDir==='asc' ? 'desc' : 'asc';
+  else { st.sortKey=key; st.sortDir = (key==='name'||key==='artist') ? 'asc' : 'desc'; }
+  renderTop100();
+};
+function renderTop100(){
+  const y=currentYear, st=top100State;
+  document.querySelectorAll('#top100Filter .pill').forEach(b=>b.classList.toggle('on', b.dataset.mode===st.mode));
+  const cols=top100Columns();
+  if(!cols.find(c=>c.key===st.sortKey)) st.sortKey = st.mode==='season' ? 'season' : 'total'; // năm vừa bị xoá khỏi cột đang sort
+  const primaryKey = st.mode==='season' ? 'season' : 'total';
+  const base = st.mode==='season'
+    ? [...model.tracks.values()].filter(t=>statsFor(t,y).woc>0)
+    : [...model.tracks.values()].filter(t=>t.allTotal>0);
+
+  if(!base.length){
+    $('top100Thead').innerHTML='';
+    $('top100Table').innerHTML=`<tr><td colspan="${cols.length+1}"><div class="empty">${st.mode==='season'?'No data yet for this year.':'No streams recorded yet.'}</div></td></tr>`;
+    $('top100Hint').textContent='';
+    return;
+  }
+
+  const col=cols.find(c=>c.key===st.sortKey);
+  const valFn=t=>top100Value(t,col.key,y);
+  const primaryFn=t=>top100Value(t,primaryKey,y);
+  // Cột số -> chọn lại đúng top 100 theo cột đó. Cột chữ (Song/Artist) -> giữ nguyên top 100 theo
+  // chỉ số chính (Streams/Total) rồi chỉ đổi thứ tự hiển thị theo bảng chữ cái.
+  const roster = col.type==='str'
+    ? [...base].sort((a,b)=>primaryFn(b)-primaryFn(a)).slice(0,100)
+    : [...base].sort((a,b)=>valFn(b)-valFn(a)).slice(0,100);
+  const cmpAsc=(a,b)=> col.type==='str' ? String(valFn(a)).localeCompare(String(valFn(b))) : valFn(a)-valFn(b);
+  const sorted=[...roster].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
+
+  $('top100Thead').innerHTML = `<tr><th style="width:52px"></th>${cols.map(c=>
+    `<th class="sortable${st.sortKey===c.key?' on':''}"${c.type==='num'?' style="text-align:right"':''} onclick="setTop100Sort('${c.key}')">${esc(c.label)}<i class="sar">${st.sortKey===c.key?(st.sortDir==='desc'?'▼':'▲'):''}</i></th>`
+  ).join('')}</tr>`;
+
+  $('top100Table').innerHTML = sorted.map(t=>`<tr>
+    <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
+    ${cols.map(c=>{
+      if(c.key==='name') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}</div></td>`;
+      if(c.key==='artist') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-artist">${esc(t.artist)}</div></td>`;
+      const v=top100Value(t,c.key,y);
+      return `<td class="num">${v?fmt(v):'—'}</td>`;
+    }).join('')}
+  </tr>`).join('');
+  hydrateThumbs();
+
+  $('top100Hint').textContent = st.mode==='season'
+    ? `Top ${sorted.length} song${sorted.length===1?'':'s'} by streams in ${y}. Click a column to sort — click again to flip direction.`
+    : `Top ${sorted.length} song${sorted.length===1?'':'s'} all-time — Pre-chart + ${model.yearList.join(', ')} + Total. Click a column to sort; clicking a different stream column re-picks the top 100 for that exact column.`;
 }
 
 /* ───────── The #1 Race — Champions ───────── */
