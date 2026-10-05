@@ -133,11 +133,20 @@
       <div class="records" id="records"></div>
     </div>
     <div class="panel">
-      <h2>Top 100 streams this season</h2>
-      <div class="chart-scroll">
-        <div class="chartbox" id="top100Box"><canvas id="chartTop100"></canvas></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="margin:0">Top 100 streams</h2>
+        <div class="pill-row" id="top100Filter" style="margin:0">
+          <button type="button" class="pill on" data-mode="season" onclick="setTop100Mode('season')">This season</button>
+          <button type="button" class="pill" data-mode="all" onclick="setTop100Mode('all')">All time</button>
+        </div>
       </div>
-      <div class="hint">Every charted song this season, ranked by total streams accumulated this season. Click a bar to open the song's page.</div>
+      <div class="table-scroll">
+        <table style="margin-top:16px">
+          <thead id="top100Thead"></thead>
+          <tbody id="top100Table"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="top100Hint"></div>
     </div>
     <div class="panel">
       <div class="race-head">
