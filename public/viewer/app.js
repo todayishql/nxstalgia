@@ -531,7 +531,7 @@ function renderAnalytics(){
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
   if(!charted.length){
     $('records').innerHTML='<div class="empty">No data yet for this year.</div>';
-    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
+    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut','chartTop100'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
     if($('champStats')) $('champStats').innerHTML='<div class="empty">No #1 songs yet.</div>';
     if($('champCarousel')) $('champCarousel').innerHTML='';
     if($('debutChips')) $('debutChips').innerHTML='';
@@ -558,6 +558,7 @@ function renderAnalytics(){
     <div class="record"><div class="rl">Most No.1 songs</div><div class="rv">${topNo1?esc(topNo1[0]):'—'}</div><div class="rd">${topNo1?topNo1[1]+' songs reached #1':''}</div></div>
     <div class="record"><div class="rl">Debut straight at No.1</div><div class="rv">${nDebut1} songs</div><div class="rd">debuted at #1</div></div>`;
 
+  renderTop100(charted, S); // "Top 100 streams this season"
   renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
   renderDebutRace(); // "Ranking Since On-Chart" — trajectory tính từ tuần đầu tiên on-chart (liên tục, xuyên năm)
 
@@ -603,6 +604,22 @@ function renderAnalytics(){
      onClick:(ev,els)=>{ if(els.length) openTrack(pts[els[0].index].t.id); } });
 
   renderPrediction(y);
+}
+
+/* Top 100 bài stream nhiều nhất của season đang chọn — thanh ngang, cuộn dọc (tối đa 100 hàng). */
+function renderTop100(charted, S){
+  const topS=[...charted].sort((a,b)=>S(b).total-S(a).total).slice(0,100);
+  const TC=TH();
+  const box=$('top100Box');
+  if(box) box.style.height=Math.max(320, topS.length*22)+'px'; // mỗi bài ~22px để tên không chồng nhau
+  drawChart('chartTop100','bar',{
+    labels: topS.map(t=>t.name),
+    datasets:[{ data: topS.map(t=>S(t).total), backgroundColor: topS.map((_,i)=>i===0?TC.red:TC.mid), barPercentage:.75, categoryPercentage:.85 }]
+  },{ indexAxis:'y',
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>fmt(c.parsed.x)+' streams · '+topS[c.dataIndex].artist } } },
+      scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid} },
+               y:{ grid:{display:false}, ticks:{ autoSkip:false, font:{size:10} } } },
+      onClick:(ev,els)=>{ if(els.length) openTrack(topS[els[0].index].id); } });
 }
 
 /* ───────── The #1 Race — Champions ───────── */
