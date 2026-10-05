@@ -34,8 +34,8 @@ export default function TracksPage() {
   const [form, setForm] = useState(EMPTY);
   const [addMode, setAddMode] = useState('single'); // 'single' | 'bulk' (dán danh sách)
   const [pasteText, setPasteText] = useState('');
-  const [editing, setEditing] = useState(null); // id đang sửa
-  const [edit, setEdit] = useState({});
+  const [rowStatus, setRowStatus] = useState({}); // id -> 'saving' | 'saved' | 'error'
+  const saveTimers = useRef({}); // id -> debounce timer, cho tự lưu khi gõ (kiểu spreadsheet)
   const [selected, setSelected] = useState(new Set());
   const [bulkGenre, setBulkGenre] = useState(''); // gán genre cho các bài đang chọn
   const [busy, setBusy] = useState(false);
@@ -65,6 +65,9 @@ export default function TracksPage() {
     const id = setTimeout(() => { setQuery(q.trim()); setPage(0); }, 300);
     return () => clearTimeout(id);
   }, [q]);
+
+  // Dọn các timer tự-lưu còn treo khi rời trang.
+  useEffect(() => () => { Object.values(saveTimers.current).forEach(clearTimeout); }, []);
 
   const parsedPaste = useMemo(() => parsePastedRows(pasteText), [pasteText]);
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -104,15 +107,35 @@ export default function TracksPage() {
     finally { setBusy(false); }
   }
 
-  async function saveEdit(id) {
+  // Sửa trực tiếp trong ô (kiểu spreadsheet): cập nhật state ngay, rồi tự lưu sau khi ngừng gõ ~600ms.
+  function updateField(id, key, val) {
+    setItems((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, [key]: val } : t));
+      scheduleSave(id, next.find((t) => t.id === id));
+      return next;
+    });
+  }
+
+  function scheduleSave(id, row) {
+    clearTimeout(saveTimers.current[id]);
+    setRowStatus((s) => ({ ...s, [id]: 'dirty' }));
+    saveTimers.current[id] = setTimeout(() => doSave(id, row), 600);
+  }
+
+  async function doSave(id, row) {
+    setRowStatus((s) => ({ ...s, [id]: 'saving' }));
     try {
       // gửi kèm artworkUrl + refetchArtwork:false -> sửa metadata KHÔNG làm mất ảnh bìa
       await api('/api/admin/tracks/' + encodeURIComponent(id), {
         method: 'PUT',
-        body: { ...edit, refetchArtwork: false },
+        body: { name: row.name, artist: row.artist, baseline: row.baseline, genre: row.genre, region: row.region, artworkUrl: row.artworkUrl, refetchArtwork: false },
       });
-      setEditing(null); flash('ok', 'Saved: ' + id); load();
-    } catch (err) { flash('err', err.message); }
+      setRowStatus((s) => (s[id] === 'saving' ? { ...s, [id]: 'saved' } : s));
+      setTimeout(() => setRowStatus((s) => (s[id] === 'saved' ? { ...s, [id]: undefined } : s)), 1500);
+    } catch (err) {
+      setRowStatus((s) => ({ ...s, [id]: 'error' }));
+      flash('err', `${id}: ${err.message}`);
+    }
   }
 
   async function remove(id) {
@@ -363,6 +386,7 @@ export default function TracksPage() {
               <th className="sortable" onClick={() => sortBy('genre')}>Genre{arrow('genre')}</th>
               <th className="sortable" onClick={() => sortBy('region')}>Region{arrow('region')}</th>
               <th className="sortable" onClick={() => sortBy('status')}>Cover art{arrow('status')}</th>
+              <th style={{ width: 56 }}></th>
               <th></th>
             </tr>
           </thead>
@@ -370,53 +394,38 @@ export default function TracksPage() {
             {items.map((t) => (
               <tr key={t.id} className={selected.has(t.id) ? 'sel' : ''}>
                 <td><input type="checkbox" checked={selected.has(t.id)} onChange={() => toggle(t.id)} aria-label={`Select ${t.id}`} /></td>
-                <td>
-                  {(() => {
-                    const url = editing === t.id ? edit.artworkUrl : t.artworkUrl;
-                    return <span className="thumb" style={url ? { backgroundImage: `url(${url})` } : {}} />;
-                  })()}
-                </td>
+                <td><span className="thumb" style={t.artworkUrl ? { backgroundImage: `url(${t.artworkUrl})` } : {}} /></td>
                 <td className="muted">{t.id}</td>
-                {editing === t.id ? (
-                  <>
-                    <td><input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></td>
-                    <td><input value={edit.artist} onChange={(e) => setEdit({ ...edit, artist: e.target.value })} /></td>
-                    <td><input inputMode="numeric" value={groupInt(edit.baseline)} onChange={(e) => setEdit({ ...edit, baseline: onlyDigits(e.target.value) })} /></td>
-                    <td><input list="genre-suggestions" value={edit.genre} placeholder="Genre" onChange={(e) => setEdit({ ...edit, genre: e.target.value })} /></td>
-                    <td>
-                      <select value={edit.region} onChange={(e) => setEdit({ ...edit, region: e.target.value })}>
-                        <option value="">— Unassigned —</option>
-                        <option value="US-UK">US-UK</option>
-                        <option value="ASIA">ASIA</option>
-                      </select>
-                    </td>
-                    <td><input value={edit.artworkUrl} placeholder="Cover art URL" onChange={(e) => setEdit({ ...edit, artworkUrl: e.target.value })} /></td>
-                    <td className="row">
-                      <button className="sm" onClick={() => saveEdit(t.id)}>Save</button>
-                      <button className="ghost sm" onClick={() => setEditing(null)}>Cancel</button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td>{t.name}</td>
-                    <td>{t.artist}</td>
-                    <td>{groupInt(t.baseline)}</td>
-                    <td>{t.genre ? <span className="pill">{t.genre}</span> : <span className="muted">—</span>}</td>
-                    <td>{t.region ? <span className="pill">{t.region}</span> : <span className="muted">—</span>}</td>
-                    <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
-                    <td className="row">
-                      <button className="ghost sm" onClick={() => { setEditing(t.id); setEdit({ name: t.name, artist: t.artist, baseline: t.baseline, genre: t.genre || '', region: t.region || '', artworkUrl: t.artworkUrl || '' }); }}>Edit</button>
-                      <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
-                      {!t.genre && <button className="ghost sm" onClick={() => refetchGenre(t.id)}>Genre</button>}
-                      <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
-                    </td>
-                  </>
-                )}
+                <td><input className="cell" value={t.name} onChange={(e) => updateField(t.id, 'name', e.target.value)} /></td>
+                <td><input className="cell" value={t.artist} onChange={(e) => updateField(t.id, 'artist', e.target.value)} /></td>
+                <td><input className="cell" inputMode="numeric" value={groupInt(t.baseline)} onChange={(e) => updateField(t.id, 'baseline', onlyDigits(e.target.value))} /></td>
+                <td><input className="cell" list="genre-suggestions" value={t.genre || ''} placeholder="Genre" onChange={(e) => updateField(t.id, 'genre', e.target.value)} /></td>
+                <td>
+                  <select className="cell" value={t.region || ''} onChange={(e) => updateField(t.id, 'region', e.target.value)}>
+                    <option value="">— Unassigned —</option>
+                    <option value="US-UK">US-UK</option>
+                    <option value="ASIA">ASIA</option>
+                  </select>
+                </td>
+                <td><span className={`pill ${t.artworkStatus}`}>{t.artworkStatus}</span></td>
+                <td>
+                  {rowStatus[t.id] === 'dirty' && <span className="savestate saving">Pending…</span>}
+                  {rowStatus[t.id] === 'saving' && <span className="savestate saving">Saving…</span>}
+                  {rowStatus[t.id] === 'saved' && <span className="savestate saved">Saved ✓</span>}
+                  {rowStatus[t.id] === 'error' && <span className="savestate error">Error</span>}
+                </td>
+                <td className="row">
+                  <button className="ghost sm" onClick={() => refetchArt(t.id)}>Image</button>
+                  {!t.genre && <button className="ghost sm" onClick={() => refetchGenre(t.id)}>Genre</button>}
+                  <button className="danger sm" onClick={() => remove(t.id)}>Delete</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+          Click any cell to edit it directly — changes auto-save a moment after you stop typing (no Edit/Save button needed).
+          <br />
           Bulk add via <strong>Paste list</strong> (one song per line: name, artist, baseline, genre) or <strong>upload CSV</strong>
           (columns <code>track_name</code>, <code>artist</code> required; <code>baseline</code>, <code>genre</code>, <code>artwork_url</code> optional).
           New songs get an auto-generated ID; rows matching an existing song (same name + artist) are skipped.

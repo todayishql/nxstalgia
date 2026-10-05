@@ -84,3 +84,16 @@ th.sortable:hover { color: var(--text); }
 .pill.ok { background: rgba(91,224,176,.15); color: var(--accent2); }
 .pill.none { background: rgba(255,107,107,.12); color:#ffb0b0; }
 .pill.pending { background: rgba(124,156,255,.15); color: var(--accent); }
+
+/* Ô sửa trực tiếp trong bảng kiểu spreadsheet: trong suốt, chỉ hiện khung khi hover/focus */
+td input.cell, td select.cell {
+  background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px;
+}
+td input.cell:hover, td select.cell:hover { border-color: var(--border); background: var(--panel2); }
+td input.cell:focus, td select.cell:focus { border-color: var(--accent); background: var(--panel2); }
+
+/* Chỉ báo trạng thái tự lưu từng dòng */
+.savestate { font-size: 11px; white-space: nowrap; }
+.savestate.saving { color: var(--muted); }
+.savestate.saved { color: var(--accent2); }
+.savestate.error { color: var(--danger); }

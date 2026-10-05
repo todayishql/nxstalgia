@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { groupInt, onlyDigits } from '../format';
 
@@ -27,6 +27,11 @@ export default function ChartEditor() {
   // thêm dòng
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
+
+  // lọc + sắp xếp danh sách đang hiển thị (không đổi thứ tự lưu trong `rows`)
+  const [filterText, setFilterText] = useState('');
+  const [sortField, setSortField] = useState('rank'); // 'rank' | 'name' | 'artist' | 'stream'
+  const [sortDir, setSortDir] = useState('asc');
 
   useEffect(() => {
     api('/api/admin/stats').then((s) => {
@@ -59,12 +64,16 @@ export default function ChartEditor() {
     setRows(withRanks([...rows, { trackId: t.id, name: t.name, artist: t.artist, rank: null, stream: 0 }]));
     setSearch(''); setResults([]);
   }
-  function updateRow(i, key, val) {
-    const next = [...rows]; next[i] = { ...next[i], [key]: val };
-    // stream đổi -> rank tự tính lại (không đổi thứ tự hàng để giữ con trỏ đang gõ)
-    setRows(key === 'stream' ? withRanks(next) : next);
+  function updateRow(trackId, key, val) {
+    setRows((prev) => {
+      const next = prev.map((r) => (r.trackId === trackId ? { ...r, [key]: val } : r));
+      // stream đổi -> rank tự tính lại
+      return key === 'stream' ? withRanks(next) : next;
+    });
   }
-  function removeRow(i) { setRows(withRanks(rows.filter((_, j) => j !== i))); }
+  function removeRow(trackId) {
+    setRows((prev) => withRanks(prev.filter((r) => r.trackId !== trackId)));
+  }
 
   // Kéo toàn bộ bài của tuần liền trước sang, giảm stream đồng bộ theo % (decay).
   async function carryPrev() {
@@ -85,13 +94,30 @@ export default function ChartEditor() {
     finally { setBusy(false); }
   }
 
-  function sortByRank() {
-    setRows([...rows].sort((a, b) => {
-      const ra = a.rank == null ? 9999 : Number(a.rank);
-      const rb = b.rank == null ? 9999 : Number(b.rank);
-      return ra - rb;
-    }));
+  function sortBy(field) {
+    if (sortField === field) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortField(field); setSortDir('asc'); }
   }
+  const arrow = (f) => (sortField === f ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
+
+  // Danh sách hiển thị: lọc theo chữ gõ (tên/nghệ sĩ/id) rồi sắp xếp theo cột đang chọn.
+  // Chỉ ảnh hưởng thứ tự HIỂN THỊ — mảng `rows` (nguồn dữ liệu để Save) không đổi thứ tự.
+  const visibleRows = useMemo(() => {
+    const f = filterText.trim().toLowerCase();
+    const base = f
+      ? rows.filter((r) => r.name.toLowerCase().includes(f) || r.artist.toLowerCase().includes(f) || r.trackId.toLowerCase().includes(f))
+      : rows;
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...base].sort((a, b) => {
+      let av, bv;
+      if (sortField === 'rank') { av = a.rank == null ? Infinity : Number(a.rank); bv = b.rank == null ? Infinity : Number(b.rank); }
+      else if (sortField === 'stream') { av = Number(a.stream) || 0; bv = Number(b.stream) || 0; }
+      else { av = String(a[sortField] || '').toLowerCase(); bv = String(b[sortField] || '').toLowerCase(); }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [rows, filterText, sortField, sortDir]);
 
   async function save() {
     setBusy(true); setMsg(null);
@@ -140,10 +166,12 @@ export default function ChartEditor() {
 
       {loaded && (
         <div className="panel">
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <h2 style={{ margin: 0 }}>Week {week}/{year} — {rows.length} songs</h2>
-            <div className="row">
-              <button className="ghost sm" onClick={sortByRank}>Sort by rank</button>
+          <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <h2 style={{ margin: 0 }}>
+              Week {week}/{year} — {visibleRows.length === rows.length ? `${rows.length} songs` : `${visibleRows.length} / ${rows.length} songs`}
+            </h2>
+            <div className="row" style={{ gap: 8 }}>
+              <input value={filterText} onChange={(e) => setFilterText(e.target.value)} placeholder="Filter this week's list…" style={{ width: 220 }} />
               <button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save week'}</button>
             </div>
           </div>
@@ -151,19 +179,30 @@ export default function ChartEditor() {
 
           <table>
             <thead>
-              <tr><th style={{ width: 70 }}>Rank</th><th>Song</th><th>Artist</th><th style={{ width: 130 }}>Streams</th><th></th></tr>
+              <tr>
+                <th className="sortable" style={{ width: 70 }} onClick={() => sortBy('rank')}>Rank{arrow('rank')}</th>
+                <th className="sortable" onClick={() => sortBy('name')}>Song{arrow('name')}</th>
+                <th className="sortable" onClick={() => sortBy('artist')}>Artist{arrow('artist')}</th>
+                <th className="sortable" style={{ width: 130 }} onClick={() => sortBy('stream')}>Streams{arrow('stream')}</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {visibleRows.map((r) => (
                 <tr key={r.trackId}>
                   <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }} className={r.rank == null ? 'muted' : ''}>{r.rank ?? '—'}</td>
                   <td>{r.name} <span className="muted" style={{ fontSize: 11 }}>{r.trackId}</span></td>
                   <td className="muted">{r.artist}</td>
-                  <td><input inputMode="numeric" value={groupInt(r.stream)}
-                    onChange={(e) => updateRow(i, 'stream', onlyDigits(e.target.value))} /></td>
-                  <td><button className="danger sm" onClick={() => removeRow(i)}>Remove</button></td>
+                  <td><input className="cell" inputMode="numeric" value={groupInt(r.stream)}
+                    onChange={(e) => updateRow(r.trackId, 'stream', onlyDigits(e.target.value))} /></td>
+                  <td><button className="danger sm" onClick={() => removeRow(r.trackId)}>Remove</button></td>
                 </tr>
               ))}
+              {visibleRows.length === 0 && (
+                <tr><td colSpan={5} className="muted" style={{ textAlign: 'center', padding: 16 }}>
+                  {filterText.trim() ? `No songs match "${filterText}".` : 'No songs in this week yet.'}
+                </td></tr>
+              )}
             </tbody>
           </table>
 
