@@ -610,8 +610,11 @@ function renderAnalytics(){
    'season' = chỉ 1 cột streams của season đang chọn (theo dropdown Season ở header);
    'all'    = cột Pre-chart + 1 cột mỗi năm (model.yearList) + Total, sort theo bất kỳ cột nào
               (kể cả Song/Artist) — click lại cùng cột để đảo chiều; click cột số khác sẽ CHỌN LẠI
-              top 100 theo đúng cột đó (giống quy ước Hall of Fame ở tab All-time). */
-let top100State={ mode:'season', sortKey:'season', sortDir:'desc' };
+              top 100 theo đúng cột đó (giống quy ước Hall of Fame ở tab All-time).
+   Cột "#" = hạng theo cột số đang sort (hoặc Streams/Total khi sort theo Song/Artist) — hạng gắn với bài,
+   không đổi khi đảo chiều hay sort chữ. Ở All time, mỗi ô năm kèm hạng của bài trong năm đó (#n).
+   Ô search lọc theo tên bài/nghệ sĩ TRÊN top 100 đã chọn — số hạng vẫn giữ nguyên. */
+let top100State={ mode:'season', sortKey:'season', sortDir:'desc', q:'', rankKey:'season' };
 function top100Columns(){
   const cols=[{key:'name', label:'Song', type:'str'}, {key:'artist', label:'Artist', type:'str'}];
   if(top100State.mode==='all'){
@@ -630,22 +633,29 @@ function top100Value(t, key, y){
   if(key[0]==='y') return statsFor(t, +key.slice(1)).total;
   return 0;
 }
+// Hạng kiểu thi đấu (1,2,2,4…) theo 1 cột số, chỉ tính bài có streams > 0 ở cột đó.
+function top100Ranks(list, key, y){
+  const rows=list.map(t=>[t, top100Value(t,key,y)]).filter(r=>r[1]>0).sort((a,b)=>b[1]-a[1]);
+  const m=new Map();
+  rows.forEach((r,i)=>m.set(r[0].id, i>0 && r[1]===rows[i-1][1] ? m.get(rows[i-1][0].id) : i+1));
+  return m;
+}
 window.setTop100Mode=function(mode){
   if(top100State.mode===mode) return;
-  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc' };
+  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc', q:top100State.q, rankKey:null };
   renderTop100();
 };
 window.setTop100Sort=function(key){
   const st=top100State;
   if(st.sortKey===key) st.sortDir = st.sortDir==='asc' ? 'desc' : 'asc';
-  else { st.sortKey=key; st.sortDir = (key==='name'||key==='artist') ? 'asc' : 'desc'; }
+  else { st.sortKey=key; st.sortDir = (key==='name'||key==='artist'||key==='rank') ? 'asc' : 'desc'; }
   renderTop100();
 };
 function renderTop100(){
   const y=currentYear, st=top100State;
   document.querySelectorAll('#top100Filter .pill').forEach(b=>b.classList.toggle('on', b.dataset.mode===st.mode));
   const cols=top100Columns();
-  if(!cols.find(c=>c.key===st.sortKey)) st.sortKey = st.mode==='season' ? 'season' : 'total'; // năm vừa bị xoá khỏi cột đang sort
+  if(st.sortKey!=='rank' && !cols.find(c=>c.key===st.sortKey)) st.sortKey = st.mode==='season' ? 'season' : 'total'; // năm vừa bị xoá khỏi cột đang sort
   const primaryKey = st.mode==='season' ? 'season' : 'total';
   const base = st.mode==='season'
     ? [...model.tracks.values()].filter(t=>statsFor(t,y).woc>0)
@@ -653,40 +663,55 @@ function renderTop100(){
 
   if(!base.length){
     $('top100Thead').innerHTML='';
-    $('top100Table').innerHTML=`<tr><td colspan="${cols.length+1}"><div class="empty">${st.mode==='season'?'No data yet for this year.':'No streams recorded yet.'}</div></td></tr>`;
+    $('top100Table').innerHTML=`<tr><td colspan="${cols.length+2}"><div class="empty">${st.mode==='season'?'No data yet for this year.':'No streams recorded yet.'}</div></td></tr>`;
     $('top100Hint').textContent='';
     return;
   }
 
-  const col=cols.find(c=>c.key===st.sortKey);
-  const valFn=t=>top100Value(t,col.key,y);
-  const primaryFn=t=>top100Value(t,primaryKey,y);
-  // Cột số -> chọn lại đúng top 100 theo cột đó. Cột chữ (Song/Artist) -> giữ nguyên top 100 theo
-  // chỉ số chính (Streams/Total) rồi chỉ đổi thứ tự hiển thị theo bảng chữ cái.
-  const roster = col.type==='str'
-    ? [...base].sort((a,b)=>primaryFn(b)-primaryFn(a)).slice(0,100)
-    : [...base].sort((a,b)=>valFn(b)-valFn(a)).slice(0,100);
-  const cmpAsc=(a,b)=> col.type==='str' ? String(valFn(a)).localeCompare(String(valFn(b))) : valFn(a)-valFn(b);
-  const sorted=[...roster].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
+  // Cột quyết định roster + số hạng (st.rankKey): cột số đang sort. Sort theo Song/Artist/# thì giữ
+  // cột số đã chọn gần nhất (mặc định Streams/Total) -> chỉ đổi thứ tự hiển thị, không đổi top 100.
+  const sortCol=cols.find(c=>c.key===st.sortKey);
+  if(sortCol && sortCol.type==='num') st.rankKey=sortCol.key;
+  if(!cols.find(c=>c.key===st.rankKey)) st.rankKey=primaryKey;
+  const rankKey=st.rankKey;
+  const rankCol=cols.find(c=>c.key===rankKey);
+  const ranks=top100Ranks(base, rankKey, y);
+  const roster=base.filter(t=>ranks.has(t.id)).sort((a,b)=>ranks.get(a.id)-ranks.get(b.id)).slice(0,100);
+  // Hạng của từng cột số (dùng cho badge #n trong ô năm/Pre-chart/Total ở chế độ All time).
+  const colRanks = st.mode==='all' ? Object.fromEntries(cols.filter(c=>c.type==='num').map(c=>[c.key, c.key===rankKey?ranks:top100Ranks(base,c.key,y)])) : {};
 
-  $('top100Thead').innerHTML = `<tr><th style="width:52px"></th>${cols.map(c=>
-    `<th class="sortable${st.sortKey===c.key?' on':''}"${c.type==='num'?' style="text-align:right"':''} onclick="setTop100Sort('${c.key}')">${esc(c.label)}<i class="sar">${st.sortKey===c.key?(st.sortDir==='desc'?'▼':'▲'):''}</i></th>`
+  const q=st.q.trim().toLowerCase();
+  const shown = q ? roster.filter(t=>(t.name+' '+t.artist).toLowerCase().includes(q)) : roster;
+  const valFn = st.sortKey==='rank' ? (t=>ranks.get(t.id)) : (t=>top100Value(t,st.sortKey,y));
+  const isStr = sortCol && sortCol.type==='str';
+  const cmpAsc=(a,b)=> (isStr ? String(valFn(a)).localeCompare(String(valFn(b))) : valFn(a)-valFn(b)) || ranks.get(a.id)-ranks.get(b.id);
+  const sorted=[...shown].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
+
+  const arrow=k=>`<i class="sar">${st.sortKey===k?(st.sortDir==='desc'?'▼':'▲'):''}</i>`;
+  $('top100Thead').innerHTML = `<tr>
+    <th class="sortable${st.sortKey==='rank'?' on':''}" style="text-align:center;width:52px" title="Rank by ${esc(rankCol.label)}" onclick="setTop100Sort('rank')">#${arrow('rank')}</th>
+    <th style="width:52px"></th>${cols.map(c=>
+    `<th class="sortable${st.sortKey===c.key?' on':''}"${c.type==='num'?' style="text-align:right"':''} onclick="setTop100Sort('${c.key}')">${esc(c.label)}${arrow(c.key)}</th>`
   ).join('')}</tr>`;
 
-  $('top100Table').innerHTML = sorted.map(t=>`<tr>
+  $('top100Table').innerHTML = sorted.length ? sorted.map(t=>{ const r=ranks.get(t.id); return `<tr>
+    <td class="rank r${r<=3?r:''}">${r}</td>
     <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
     ${cols.map(c=>{
       if(c.key==='name') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}</div></td>`;
       if(c.key==='artist') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-artist">${esc(t.artist)}</div></td>`;
       const v=top100Value(t,c.key,y);
-      return `<td class="num">${v?fmt(v):'—'}</td>`;
+      const cr=colRanks[c.key]?.get(t.id);
+      return `<td class="num">${v?fmt(v):'—'}${cr?`<span class="t100-rk${cr<=3?' top':''}">#${cr}</span>`:''}</td>`;
     }).join('')}
-  </tr>`).join('');
+  </tr>`; }).join('')
+    : `<tr><td colspan="${cols.length+2}"><div class="empty">No song or artist matches “${esc(st.q.trim())}”.</div></td></tr>`;
   hydrateThumbs();
 
+  const cnt = q ? `${sorted.length} of top ${roster.length}` : `Top ${roster.length}`;
   $('top100Hint').textContent = st.mode==='season'
-    ? `Top ${sorted.length} song${sorted.length===1?'':'s'} by streams in ${y}. Click a column to sort — click again to flip direction.`
-    : `Top ${sorted.length} song${sorted.length===1?'':'s'} all-time — Pre-chart + ${model.yearList.join(', ')} + Total. Click a column to sort; clicking a different stream column re-picks the top 100 for that exact column.`;
+    ? `${cnt} song${roster.length===1?'':'s'} by streams in ${y}. # = rank by streams this season. Click a column to sort — click again to flip direction.`
+    : `${cnt} song${roster.length===1?'':'s'} all-time, ranked by ${rankCol.label}. Each stream cell shows the song's rank (#n) in that column. Click a column to sort; clicking a different stream column re-picks the top 100 for that exact column.`;
 }
 
 /* ───────── The #1 Race — Champions ───────── */
@@ -1581,6 +1606,7 @@ $('wNext').onclick=()=>{ if(selectedWeek<maxWeekOf(currentYear)+1){selectedWeek+
 $('wSelect').onchange=e=>{ selectedWeek=+e.target.value; renderChartView(); };
 $('pngBtn').onclick=exportPNG;
 $('trackSearch').oninput=()=>renderTrackList();
+$('top100Search').oninput=e=>{ top100State.q=e.target.value; renderTop100(); };
 $('cmpBtn').onclick=runCompare;
 $('debutAddBtn').onclick=addDebutSong;
 $('debutAdd').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addDebutSong(); } });
