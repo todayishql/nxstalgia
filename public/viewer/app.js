@@ -25,15 +25,15 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='blo
 const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 function isDark(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
 // bảng màu categorical cho line/doughnut nhiều series (khớp bản thiết kế Blue)
-const PALETTE=['#4C93FF','#38D39A','#FFB454','#FF6F6F','#A78BFA','#22D3EE','#F472B6','#7DA0C4'];
+const PALETTE=['#4F46E5','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#EC4899','#64748B'];
 function TH(){
   const dark=isDark();
   return {
     ink:cssv('--ink')||'#0C1420', red:cssv('--red')||'#1D5BD6',
     mid:cssv('--muted')||'#4E5B6A', faint:cssv('--faint')||'#5A6673',
     onInk:cssv('--paper')||'#F4F8FD',
-    grid: dark?'rgba(237,243,250,.10)':'rgba(12,20,32,.08)',
-    fill: dark?'rgba(76,147,255,.28)':'rgba(29,91,214,.18)'
+    grid: dark?'rgba(226,232,240,.10)':'rgba(15,23,42,.07)',
+    fill: dark?'rgba(129,140,248,.28)':'rgba(79,70,229,.16)'
   };
 }
 function applyChartDefaults(){
@@ -41,20 +41,21 @@ function applyChartDefaults(){
   const t=TH();
   Chart.defaults.color=t.mid;
   Chart.defaults.borderColor=t.grid;
-  Chart.defaults.font.family='"Nunito Sans", system-ui, sans-serif';
+  Chart.defaults.font.family='"Inter", system-ui, sans-serif';
   Chart.defaults.font.size=11;
   Chart.defaults.elements.bar.borderRadius=6;
+  Chart.defaults.elements.line.borderWidth=2;
   Object.assign(Chart.defaults.plugins.tooltip,{
     backgroundColor:t.ink, titleColor:t.onInk, bodyColor:t.onInk,
     cornerRadius:8, displayColors:false, padding:10,
-    titleFont:{family:'"JetBrains Mono", monospace', size:10},
-    bodyFont:{family:'"JetBrains Mono", monospace', size:11}
+    titleFont:{family:'"Inter", system-ui, sans-serif', size:10},
+    bodyFont:{family:'"Inter", system-ui, sans-serif', size:11}
   });
   Object.assign(Chart.defaults.plugins.legend.labels,{
     color:t.ink, boxWidth:10, boxHeight:10,
-    font:{family:'"JetBrains Mono", monospace', size:10}
+    font:{family:'"Inter", system-ui, sans-serif', size:10}
   });
-  Chart.defaults.scale.ticks.font={family:'"JetBrains Mono", monospace', size:10};
+  Chart.defaults.scale.ticks.font={family:'"Inter", system-ui, sans-serif', size:10};
 }
 applyChartDefaults();
 function themeLabel(){ const el=$('themeLabel'); if(el) el.textContent = isDark()?'Light':'Dark'; }
@@ -328,8 +329,27 @@ function renderOverview(){
 }
 
 /* ───────── render: chart sheet ───────── */
-const SONG_HINT="TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.";
-const ARTIST_HINT="Artists ranked by their on-chart streams that week — a song credits its full stream count to every artist on it, so a collab feeds both. TW/LW = this week's rank / last week's rank · ● = streams up from last week · Wks = weeks on the artist chart. Click an artist for their profile.";
+const SONG_HINT="+/- = rank change from last week · % = stream change from last week · Peak is highlighted when a song reaches a new peak · WoC = weeks on chart · Share = share of this week's chart streams. Click a song to see its trajectory.";
+const ARTIST_HINT="Artists ranked by their on-chart streams that week — a song credits its full stream count to every artist on it, so a collab feeds both. +/- = rank change · % = stream change · WoC = weeks on the artist chart · Share = share of all artist streams that week. Click an artist for their profile.";
+// Ô +/- và tông màu hàng (kiểu talkofthecharts): lên = xanh lá, xuống = hồng, NEW = xanh dương, RE = tím
+function mvCell(cls, d){
+  if(cls==='new') return 'NEW';
+  if(cls==='re') return 'RE';
+  if(cls==='up') return '+'+d;
+  if(cls==='down') return '-'+d;
+  return '=';
+}
+// % stream so với tuần trước -> {txt, cls}; |%|>=10 tô đậm hơn
+function pctCell(cur, prev){
+  if(!(prev>0)) return { txt:'—', cls:'' };
+  const p=Math.round((cur-prev)/prev*100);
+  const txt=p>999?'>999%':(p>0?'+':'')+p+'%';
+  const cls=p>0?(p>=10?' pos hi':' pos'):(p<0?(p<=-10?' neg hi':' neg'):' zero');
+  return { txt, cls };
+}
+const shareTxt = (v,total) => total>0 ? (v/total*100).toFixed(1)+'%' : '—';
+// peak trước tuần (y,w) — để biết tuần này có lập peak mới không
+function peakBefore(t,y,w){ const target=gwOf(y,w); let p=null; for(const [py,pm] of t.years) for(const [pw,e] of pm) if(gwOf(py,pw)<target && e.rank!=null && (p==null||e.rank<p)) p=e.rank; return p; }
 let chartMode='songs'; // 'songs' | 'artists' — cùng sheet, cùng week-nav
 window.setChartMode=function(m){ chartMode = m==='artists' ? 'artists' : 'songs'; renderChartView(); };
 
@@ -361,38 +381,29 @@ function renderChartView(){
     const prev=entryAtGw(r.t, gwOf(y,w)-1);
     if(prev&&prev.rank!=null){ const jump=prev.rank-r.rank; if(jump>bestJump){ bestJump=jump; gainerId=r.t.id; } }
   }
+  const total=rows.reduce((a,r)=>a+r.stream,0);
   $('chartTable').innerHTML = rows.length ? rows.map(r=>{
-    const mv=movement(r.t,y,w)||{cls:'eq',txt:'='};
+    const mv=movement(r.t,y,w)||{cls:'eq'};
     const prev=entryAtGw(r.t, gwOf(y,w)-1);
-    // bullet ● (quy ước Billboard): stream tăng so với tuần trước
-    const bullet = prev && prev.stream>0 && r.stream>prev.stream;
-    let lw='—';
-    if(mv.cls==='new') lw='<span class="lw-new">NEW</span>';
-    else if(mv.cls==='re') lw='<span class="lw-re">RE</span>';
-    else if(prev&&prev.rank!=null) lw=prev.rank;
-    let pctTxt='', pctCls='';
-    if(prev && prev.stream>0){
-      const p=Math.round((r.stream-prev.stream)/prev.stream*100);
-      // cap hiển thị: chênh quá 999% (dữ liệu khác thang đo) -> in ">999%" thay vì số 7 chữ số
-      pctTxt=p>999?'>999%':(p>0?'+':'')+p+'%'; pctCls=p>0?' pos':(p<0?' neg':'');
-    }
+    const d=(prev&&prev.rank!=null)?Math.abs(prev.rank-r.rank):0;
+    const pc=pctCell(r.stream, prev?prev.stream:0);
     const pk=peakUpTo(r.t,y,w);
+    const pb=peakBefore(r.t,y,w);
+    const newPeak = mv.cls!=='new' && pb!=null && r.rank<pb;
     const woc=wocUpTo(r.t,y,w);
     const callout = r.t.id===hotShotId ? '<span class="callout hotshot">Hot Shot Debut</span>'
                   : (r.t.id===gainerId && bestJump>=3) ? '<span class="callout gainer">Greatest Gainer</span>' : '';
-    // chỉ dấu lên/xuống hạng: cột riêng sau LW — ▲3 / ▼2 / = (NEW/RE để trống)
-    const hasMv = mv.cls==='up'||mv.cls==='down'||mv.cls==='eq';
-    // up/down: ▲n / ▼n; không đổi hạng (eq) hoặc không có mv -> để trống cho gọn
-    const mvInner = (mv.cls==='up'||mv.cls==='down') ? mv.txt : '';
-    return `<tr class="clickable" onclick="openTrack('${r.t.id}')">
-      <td class="rk-tw${r.rank===1?' no1':''}"><span class="rk-num">${r.rank}${bullet?'<span class="blt">●</span>':''}</span></td>
-      <td class="rk-lw">${lw}</td>
-      <td class="rk-mv ${hasMv?mv.cls:'none'}"><span class="mv-in">${mvInner}</span></td>
-      <td><div class="songcell">${thumbHTML(r.t)}<div class="songmeta"><div class="s-name">${esc(r.t.name)}${r.user?'<span class="badge-user">YOUR ENTRY</span>':''}${callout}</div><div class="s-artist">${esc(r.t.artist)}</div></div></div></td>
-      <td class="pts">${fmt(r.stream)}</td>
-      <td class="pct${pctCls}">${pctTxt}</td>
-      <td class="peakc${pk===1?' no1':''}">${pk}</td>
-      <td class="wocc">${woc}</td>
+    // nhảy >=10 bậc (hoặc Greatest Gainer) -> tông xanh đậm
+    const tone = mv.cls==='up' && (d>=10 || (r.t.id===gainerId && bestJump>=3)) ? 'hot' : mv.cls;
+    return `<tr class="clickable row-${tone}" onclick="openTrack('${r.t.id}')">
+      <td class="c-rk${r.rank===1?' no1':''}">${r.rank}</td>
+      <td class="c-mv mv-${mv.cls}">${mvCell(mv.cls,d)}</td>
+      <td class="c-song"><div class="songcell">${thumbHTML(r.t)}<div class="songmeta"><div class="s-name">${esc(r.t.name)}${r.user?'<span class="badge-user">YOUR ENTRY</span>':''}${callout}</div><div class="s-artist">${esc(r.t.artist)}</div></div></div></td>
+      <td class="c-st">${fmt(r.stream)}</td>
+      <td class="c-pct${pc.cls}">${pc.txt}</td>
+      <td class="c-pk${newPeak?' newpk':''}${pk===1?' no1':''}">${pk}</td>
+      <td class="c-woc">${woc}</td>
+      <td class="c-sh">${shareTxt(r.stream,total)}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="8"><div class="empty">No data yet for this week — edit data at /admin.</div></td></tr>';
   hydrateThumbs();
@@ -460,35 +471,30 @@ function renderArtistSheet(y,w){
     else { const jump=pr-pos; if(jump>bestJump){ bestJump=jump; gainer=r.key; } }
   });
 
+  const total=rows.reduce((a,r)=>a+r.streams,0);
   $('chartTable').innerHTML = rows.length ? rows.map((r,i)=>{
     const pos=i+1;
     const pr=prev?prev.rankOf.get(r.key):null;
     const prow=prev?prev.byKey.get(r.key):null;
-    let lw='—', mvCls='none', mvTxt='';
-    if(pr!=null){
-      const d=pr-pos; lw=pr;
-      if(d>0){ mvCls='up'; mvTxt='▲'+d; } else if(d<0){ mvCls='down'; mvTxt='▼'+(-d); } else mvCls='eq';
-    } else {
-      lw = ac.firstOf.get(r.key)===y*100+w ? '<span class="lw-new">NEW</span>' : '<span class="lw-re">RE</span>';
-    }
-    let pctTxt='', pctCls='';
-    if(prow && prow.streams>0){
-      const p=Math.round((r.streams-prow.streams)/prow.streams*100);
-      pctTxt = p>999?'>999%':(p>0?'+':'')+p+'%'; pctCls = p>0?' pos':(p<0?' neg':'');
-    }
-    const bullet = prow && prow.streams>0 && r.streams>prow.streams;
+    let cls, d=0;
+    if(pr!=null){ d=Math.abs(pr-pos); cls = pr>pos?'up':(pr<pos?'down':'eq'); }
+    else cls = ac.firstOf.get(r.key)===y*100+w ? 'new' : 're';
+    const pc=pctCell(r.streams, prow?prow.streams:0);
     const run=artistRunUpTo(weeks,r.key,w);
+    const pb=w>1?artistRunUpTo(weeks,r.key,w-1).peak:null;
+    const newPeak = cls!=='new' && pb!=null && pos<pb;
     const callout = r.key===hotShot ? '<span class="callout hotshot">Hot Shot Debut</span>'
                   : (r.key===gainer && bestJump>=3) ? '<span class="callout gainer">Greatest Gainer</span>' : '';
-    return `<tr class="clickable" onclick="openArtist('${jsStr(r.name)}')">
-      <td class="rk-tw${pos===1?' no1':''}"><span class="rk-num">${pos}${bullet?'<span class="blt">●</span>':''}</span></td>
-      <td class="rk-lw">${lw}</td>
-      <td class="rk-mv ${mvCls}"><span class="mv-in">${mvTxt}</span></td>
-      <td><div class="songcell"><div class="songmeta"><div class="s-name">${esc(r.name)}${callout}</div><div class="s-artist">${r.songs} song${r.songs>1?'s':''} on chart</div></div></div></td>
-      <td class="pts">${fmt(r.streams)}</td>
-      <td class="pct${pctCls}">${pctTxt}</td>
-      <td class="peakc${run.peak===1?' no1':''}">${run.peak??'—'}</td>
-      <td class="wocc">${run.woc}</td>
+    const tone = cls==='up' && (d>=10 || (r.key===gainer && bestJump>=3)) ? 'hot' : cls;
+    return `<tr class="clickable row-${tone}" onclick="openArtist('${jsStr(r.name)}')">
+      <td class="c-rk${pos===1?' no1':''}">${pos}</td>
+      <td class="c-mv mv-${cls}">${mvCell(cls,d)}</td>
+      <td class="c-song"><div class="songcell"><div class="songmeta"><div class="s-name">${esc(r.name)}${callout}</div><div class="s-artist">${r.songs} song${r.songs>1?'s':''} on chart</div></div></div></td>
+      <td class="c-st">${fmt(r.streams)}</td>
+      <td class="c-pct${pc.cls}">${pc.txt}</td>
+      <td class="c-pk${newPeak?' newpk':''}${run.peak===1?' no1':''}">${run.peak??'—'}</td>
+      <td class="c-woc">${run.woc}</td>
+      <td class="c-sh">${shareTxt(r.streams,total)}</td>
     </tr>`;
   }).join('') : '<tr><td colspan="8"><div class="empty">No artist data for this week — edit data at /admin.</div></td></tr>';
 }
@@ -515,7 +521,7 @@ const CHAMP_COLORS=PALETTE;
 let raceState={ year:null, sort:'weeks', selected:new Set(), upTo:null, champs:[], colorOf:{}, statSize:5, statPage:0, carExpanded:false };
 /* Vẽ tên bài ở điểm cuối của các line champion đang chọn */
 const raceLabelPlugin={ id:'raceLabels', afterDatasetsDraw(chart){
-  const ctx=chart.ctx; ctx.save(); ctx.font='700 11px "Nunito Sans", system-ui, sans-serif'; ctx.textBaseline='middle';
+  const ctx=chart.ctx; ctx.save(); ctx.font='700 11px "Inter", system-ui, sans-serif'; ctx.textBaseline='middle';
   chart.data.datasets.forEach((ds,i)=>{
     if(!ds._champ) return;
     const meta=chart.getDatasetMeta(i); let pt=null;
@@ -598,9 +604,9 @@ function renderAnalytics(){
     datasets:[{ data:pts, backgroundColor:pts.map(p=>p.one?TC.red:TC.mid), pointRadius:5, pointHoverRadius:7 }]
   },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>{const p=c.raw; return [p.t.name+' — '+p.t.artist, p.x+' wks · '+fmt(p.y)+'/wk'];} } } },
      scales:{ x:{ ticks:{precision:0}, grid:{color:TC.grid},
-                  title:{display:true, text:'WEEKS ON CHART', color:TC.mid, font:{family:'"JetBrains Mono", monospace', size:9}} },
+                  title:{display:true, text:'WEEKS ON CHART', color:TC.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} },
               y:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid},
-                  title:{display:true, text:'AVG STREAMS / WEEK', color:TC.mid, font:{family:'"JetBrains Mono", monospace', size:9}} } },
+                  title:{display:true, text:'AVG STREAMS / WEEK', color:TC.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} } },
      onClick:(ev,els)=>{ if(els.length) openTrack(pts[els[0].index].t.id); } });
 
   renderPrediction(y);
@@ -878,9 +884,9 @@ function renderDebutChart(){
   const rankMax=Math.max(10, ...ranks, 1);
   const t=TH();
   drawChart('chartDebut','line',{ labels, datasets:ds },
-    { plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'"Nunito Sans", sans-serif', size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
+    { plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'"Inter", system-ui, sans-serif', size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
       scales:{ y:{ reverse:true, min:1, max:rankMax, grid:{color:t.grid}, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
-               x:{ grid:{display:false}, title:{ display:true, text:'WEEKS SINCE ON-CHART', color:t.mid, font:{family:'"JetBrains Mono", monospace', size:9} }, ticks:{ maxTicksLimit:14 } } } });
+               x:{ grid:{display:false}, title:{ display:true, text:'WEEKS SINCE ON-CHART', color:t.mid, font:{family:'"Inter", system-ui, sans-serif', size:9} }, ticks:{ maxTicksLimit:14 } } } });
 }
 window.debutRemove=function(id){ debutState.selected.delete(id); renderDebutChips(); renderDebutChart(); };
 function addDebutSong(){
@@ -959,7 +965,7 @@ function runCompare(){
   const maxR=Math.max(20, ...[a,b].flatMap(t=>{const wm=t.years.get(y)||new Map(); return [...wm.values()].filter(e=>e.rank!=null).map(e=>e.rank);}));
   const tc=TH();
   drawChart('chartCmp','line',{ labels, datasets:[mk(a,tc.red), mk(b,PALETTE[1])] },
-    { plugins:{ legend:{position:'bottom', labels:{font:{family:'"Nunito Sans", sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
+    { plugins:{ legend:{position:'bottom', labels:{font:{family:'"Inter", system-ui, sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
       scales:{ y:{ reverse:true, min:1, max:maxR, grid:{color:tc.grid}, ticks:{callback:v=>'#'+v} },
                x:{ grid:{display:false}, ticks:{maxTicksLimit:12} } } });
   hydrateThumbs();
@@ -1070,7 +1076,7 @@ window.openArtist = function(name){
       datasets: top6.map((t,i)=>({ label:t.name,
         data: labels.map((_,ix)=>{const e=entryAt(t,y,ix+1); return e&&e.rank!=null?e.rank:null;}),
         borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length], borderWidth:2.5, tension:.35, pointRadius:0, pointHoverRadius:5, spanGaps:false }))
-    },{ plugins:{ legend:{position:'bottom', labels:{font:{family:'"Nunito Sans", sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
+    },{ plugins:{ legend:{position:'bottom', labels:{font:{family:'"Inter", system-ui, sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
        scales:{ y:{ reverse:true, min:1, grid:{color:TH().grid}, ticks:{callback:v=>'#'+v} },
                 x:{ grid:{display:false}, ticks:{maxTicksLimit:14} } } });
   }
@@ -1242,9 +1248,9 @@ function drawAtDist(){
           title:c=>`${abbr(edge(c[0].dataIndex))} – ${abbr(edge(c[0].dataIndex+1))} streams`,
           label:c=>`${c.parsed.y} song${c.parsed.y===1?'':'s'} · ${(c.parsed.y/total*100).toFixed(1)}% (${mode.label})` } } },
       scales:{ y:{ beginAtZero:true, grid:{color:td.grid}, ticks:{precision:0},
-                   title:{display:true, text:'SONGS', color:td.mid, font:{family:'"JetBrains Mono", monospace', size:9}} },
+                   title:{display:true, text:'SONGS', color:td.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} },
                x:{ grid:{display:false}, ticks:{ autoSkip:true, maxTicksLimit:16, maxRotation:0 },
-                   title:{display:true, text:`STREAMS — BIN ${abbr(AT_DIST_BIN)}`, color:td.mid, font:{family:'"JetBrains Mono", monospace', size:9}} } },
+                   title:{display:true, text:`STREAMS — BIN ${abbr(AT_DIST_BIN)}`, color:td.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} } },
       datasets:{ bar:{ categoryPercentage:1, barPercentage:.92 } } });
 }
 

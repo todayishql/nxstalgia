@@ -6,14 +6,13 @@
 <title>THE N[26]stalgia — Personal Chart</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/viewer/styles.css">
 <script>
-/* Đặt theme trước khi vẽ để không nháy sáng/tối */
+/* Đặt theme trước khi vẽ để không nháy sáng/tối — mặc định light, chỉ dark khi người dùng đã chọn */
 (function(){
   try{
-    var s=localStorage.getItem('n26-theme');
-    if(!s) s=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+    var s=localStorage.getItem('n26-theme')||'light';
     document.documentElement.setAttribute('data-theme', s);
   }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
 })();
@@ -23,20 +22,19 @@
 </head>
 <body>
 
-<div class="topbar">
-  <div class="wrap tb-inner">
-    <span class="sub">Personal music chart · by streams</span>
-    <span class="spacer"></span>
-    <button type="button" class="ghostmini" id="themeBtn" aria-label="Switch colour theme">
-      <span class="tdot" aria-hidden="true"></span><span id="themeLabel">Light</span>
-    </button>
-    <a href="/admin" class="admin-link" title="Data administration">Admin</a>
+<header class="hero">
+  <div class="wrap hero-inner">
+    <div class="brand">
+      <h1 id="brandTitle">THE N<em>[26]</em>stalgia</h1>
+      <div class="dateline">Personal music chart · by streams · since 2026</div>
+    </div>
+    <div class="hero-actions">
+      <button type="button" class="ghostmini" id="themeBtn" aria-label="Switch colour theme">
+        <span class="tdot" aria-hidden="true"></span><span id="themeLabel">Dark</span>
+      </button>
+      <a href="/admin" class="admin-link" title="Data administration">Admin</a>
+    </div>
   </div>
-</div>
-
-<header>
-  <h1 id="brandTitle">THE N<em>[26]</em>stalgia</h1>
-  <div class="dateline">Personal music chart · multi-year edition · since 2026</div>
 </header>
 
 <div class="navbar">
@@ -102,6 +100,7 @@
       <span class="spacer"></span>
       <button class="btn small" id="pngBtn">⬇ Download PNG</button>
     </div>
+    <div class="sheet-scroll">
     <div class="sheet" id="sheetEl">
       <div class="sheet-head">
         <div class="sheet-title" id="sheetTitle">THE&nbsp;N<em>[26]</em>stalgia</div>
@@ -110,18 +109,19 @@
         <div class="sheet-box dates" id="sheetDates">—</div>
       </div>
       <table>
-        <thead><tr><th style="text-align:center">TW</th><th style="text-align:center">LW</th><th style="text-align:center">+/-</th><th id="colSubject">Song</th><th style="text-align:right">Streams</th><th style="text-align:right">±%</th><th style="text-align:center">Peak</th><th style="text-align:center">Wks</th></tr></thead>
+        <thead><tr><th class="c-rk">Rank</th><th class="c-mv">+/-</th><th id="colSubject">Song</th><th class="c-st">Streams</th><th class="c-pct">%</th><th class="c-pk">Peak</th><th class="c-woc">WoC</th><th class="c-sh">Share</th></tr></thead>
         <tbody id="chartTable"></tbody>
       </table>
     </div>
+    </div>
     <div class="legend">
-      <span class="lg"><span class="lgm" style="color:var(--red)">●</span>Stream gain</span>
-      <span class="lg"><span class="lgm" style="color:var(--up);background:var(--up-bg)">▲</span>Climb</span>
-      <span class="lg"><span class="lgm" style="color:var(--down);background:var(--down-bg)">▼</span>Fall</span>
-      <span class="lg"><span class="lgm" style="background:var(--red);color:var(--on-red);letter-spacing:.06em">NEW</span>First week</span>
-      <span class="lg"><span class="lgm" style="border:1px solid var(--line)">RE</span>Re-entry</span>
-      <span class="lg"><span class="lgm" style="color:var(--faint)">TW/LW</span>This / last week</span>
-      <span class="lg"><span class="lgm" style="color:var(--faint)">WKS</span>Weeks on chart</span>
+      <span class="lg"><span class="lgm sw-up"></span>Climb</span>
+      <span class="lg"><span class="lgm sw-hot"></span>Big climb</span>
+      <span class="lg"><span class="lgm sw-down"></span>Fall</span>
+      <span class="lg"><span class="lgm sw-eq"></span>No change</span>
+      <span class="lg"><span class="lgm sw-new"></span>New entry</span>
+      <span class="lg"><span class="lgm sw-re"></span>Re-entry</span>
+      <span class="lg"><span class="lgm sw-pk"></span>New peak</span>
     </div>
     <div class="hint" id="chartHint">TW/LW = this week's rank / last week's rank · ● = streams up from last week · ±% = stream change. Click a song to see its trajectory.</div>
   </section>
