@@ -126,6 +126,7 @@ function buildModel(){
     for(const y of Object.keys(t._stats)){ const s=t._stats[y]; if(s.peak!=null&&(t.allPeak==null||s.peak<t.allPeak)) t.allPeak=s.peak; t.allWoc+=s.woc; }
   }
   const yearList=[...years.keys()].sort((a,b)=>a-b);
+  CHART_SIZE = Math.max(10, ...DATA.entries.map(e=>e.rank||0));
   model = { tracks, years, yearList };
   ARTCHART=null; // model dựng lại -> bỏ cache bảng xếp hạng nghệ sĩ
   // Năm/tuần "mới nhất" luôn lấy từ dữ liệu thực tế (liên tục kể từ 2026, không tách theo "season"/năm) —
@@ -347,6 +348,10 @@ function pctCell(cur, prev){
   const cls=p>0?(p>=10?' pos hi':' pos'):(p<0?(p<=-10?' neg hi':' neg'):' zero');
   return { txt, cls };
 }
+// bậc màu heatmap theo hạng: #1 / 2–5 / 6–10 / 11–20 / 21–50 / 51+
+const rankTier = r => r===1?'q1':r<=5?'q2':r<=10?'q3':r<=20?'q4':r<=50?'q5':'q6';
+// số lớn trong thẻ: rút gọn (798.6M), giữ số đầy đủ ở tooltip
+const bigNum = n => (n||0)>=1e7 ? `<span title="${fmt(n)}">${abbr(n)}</span>` : fmt(n||0);
 const shareTxt = (v,total) => total>0 ? (v/total*100).toFixed(1)+'%' : '—';
 // peak trước tuần (y,w) — để biết tuần này có lập peak mới không
 function peakBefore(t,y,w){ const target=gwOf(y,w); let p=null; for(const [py,pm] of t.years) for(const [pw,e] of pm) if(gwOf(py,pw)<target && e.rank!=null && (p==null||e.rank<p)) p=e.rank; return p; }
@@ -531,9 +536,10 @@ const raceLabelPlugin={ id:'raceLabels', afterDatasetsDraw(chart){
   });
   ctx.restore();
 } };
-/* Hạng > CHART_SIZE trong dữ liệu là "ngoài chart" (#51/#52 là ô giữ chỗ) — các biểu đồ quỹ đạo coi là khoảng trống */
-const CHART_SIZE=50;
-const onChartRank = e => (e && e.rank!=null && e.rank<=CHART_SIZE) ? e.rank : null;
+/* Kích thước chart đổi theo tuần (Top 20 … Top 100): bài có hạng = đang trong chart, không có hạng = ngoài chart.
+   CHART_SIZE = hạng lớn nhất từng có trong dữ liệu — dùng làm đáy trục hạng của các biểu đồ (tính lại ở buildModel). */
+let CHART_SIZE=100;
+const onChartRank = e => (e && e.rank!=null) ? e.rank : null;
 // Làm mờ 1 màu hex (#RRGGBB) cho line nền khi đang focus line khác
 const fadeHex = (c,a='33') => /^#[0-9a-f]{6}$/i.test(c) ? c+a : c;
 // Hover 1 line -> line đó dày + rõ, các line khác mờ đi (dùng chung cho race / debut / compare)
@@ -636,7 +642,8 @@ function renderMovers(y){
 }
 
 function renderPeakBars(y, charted){
-  const B=[['#1',p=>p===1],['#2–3',p=>p<=3],['#4–10',p=>p<=10],['#11–20',p=>p<=20],['#21–50',p=>p<=CHART_SIZE],['Outside top 50',()=>true]];
+  const B=[['#1',p=>p===1],['#2–3',p=>p<=3],['#4–10',p=>p<=10],['#11–20',p=>p<=20],['#21–50',p=>p<=50]];
+  if(CHART_SIZE>50) B.push([`#51–${CHART_SIZE}`,()=>true]);
   const cnt=B.map(()=>0);
   for(const t of charted){ const p=statsFor(t,y).peak; const i=B.findIndex(([,f])=>f(p)); cnt[i]++; }
   const max=Math.max(1,...cnt), tot=charted.length;
@@ -657,7 +664,7 @@ function renderShare(y){
   const perWeek=[]; const tot=new Map();
   for(let w=1; w<=mw; w++){
     const m=new Map();
-    for(const r of weekChart(y,w)){ if(r.rank>CHART_SIZE) continue; for(const g of groupsOf(r.t)){ m.set(g,(m.get(g)||0)+r.stream); tot.set(g,(tot.get(g)||0)+r.stream); } }
+    for(const r of weekChart(y,w)){ for(const g of groupsOf(r.t)){ m.set(g,(m.get(g)||0)+r.stream); tot.set(g,(tot.get(g)||0)+r.stream); } }
     perWeek.push(m);
   }
   // giữ 5 nhóm lớn nhất, còn lại gộp "Other"
@@ -702,7 +709,7 @@ function renderRuns(y, charted){
   else if(runState.sort==='peak') list.sort((a,b)=>a.peak-b.peak || b.woc-a.woc);
   else list.sort((a,b)=>b.woc-a.woc || a.peak-b.peak);
   const n=runState.more?50:20, rows=list.slice(0,n);
-  const q=r=> r===1?'q1':r<=5?'q2':r<=10?'q3':r<=20?'q4':'q5';
+  const q=rankTier;
   const head=`<div class="run-row run-head"><div class="run-name"></div><div class="run-cells">${
     Array.from({length:mw},(_,i)=>`<span>${(i+1)%5===0||i===0?i+1:''}</span>`).join('')}</div><div class="run-stat">WoC</div><div class="run-stat">Peak</div></div>`;
   $('runGrid').style.setProperty('--n', mw);
@@ -963,7 +970,7 @@ function renderRaceChart(y){
   const sorted=sortChamps(champs, raceState.sort);
   const upTo=raceState.upTo||maxWeekOf(y)||1;
   const labels=[]; for(let w=1;w<=upTo;w++) labels.push('W'+w);
-  // hạng ngoài top CHART_SIZE -> null: đường ngắt thay vì cắm xuống đáy
+  // tuần không có hạng -> null: đường ngắt thay vì cắm xuống đáy
   const series=c=>labels.map((_,ix)=>onChartRank(entryAt(c.t,y,ix+1)));
   const t=TH();
   const ds=[];
@@ -1292,14 +1299,14 @@ window.openTrack = function(id, yPick, quiet, fromHash){
       ${tile('Peak', s.peak?'#'+s.peak:'—', s.peak?`${atPeak} wk${atPeak===1?'':'s'} at peak · W${peakW}`:'', s.peak===1?'gold':'')}
       ${tile('Weeks on chart', s.woc, `${t.allWoc} across all seasons`)}
       ${tile('Weeks at No.1', no1w||'—', s.streak>1?`longest run ${s.streak} wks`:'')}
-      ${tile(`Streams ${y}`, fmt(s.total), s.woc?`${fmt(Math.round(s.total/s.woc))} / chart week`:'')}
-      ${tile('All-time streams', fmt(t.allTotal), t.baseline?`${fmt(t.baseline)} pre-chart`:'')}
+      ${tile(`Streams ${y}`, bigNum(s.total), s.woc?`${abbr(Math.round(s.total/s.woc))} / chart week`:'')}
+      ${tile('All-time streams', bigNum(t.allTotal), t.baseline?`${abbr(t.baseline)} pre-chart`:'')}
     </div>
     <div class="panel">
       <div class="race-head" style="margin-bottom:8px"><h2 style="margin:0">Chart run · ${y}</h2>
         <div class="legend-inline"><span><i class="li-line"></i>Rank</span><span><i class="li-bar"></i>Streams</span></div></div>
       <div class="chartbox"><canvas id="chartTraj"></canvas></div>
-      <div class="sd-strip" style="--n:${mw}">${Array.from({length:mw},(_,k)=>{ const r=onChartRank(wm.get(k+1)); const q=r==null?'':r===1?'q1':r<=5?'q2':r<=10?'q3':r<=20?'q4':'q5'; return `<i class="${q}" title="W${k+1}${r?' · #'+r:' · off chart'}"></i>`; }).join('')}</div>
+      <div class="sd-strip" style="--n:${mw}">${Array.from({length:mw},(_,k)=>{ const r=onChartRank(wm.get(k+1)); const q=r==null?'':rankTier(r); return `<i class="${q}" title="W${k+1}${r?' · #'+r:' · off chart'}"></i>`; }).join('')}</div>
     </div>
     <div class="grid2 sd-grid">
       <div class="panel">
@@ -1328,7 +1335,7 @@ window.openTrack = function(id, yPick, quiet, fromHash){
     { type:'bar', label:'Streams', data:st, yAxisID:'y2', backgroundColor:fadeHex(cssv('--faint')||'#7A8496','40'), borderRadius:3, barPercentage:.9, categoryPercentage:1, order:2 }
   ]},{ interaction:{ mode:'index', intersect:false },
      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>c.dataset.label==='Rank'?(c.parsed.y!=null?'Rank #'+c.parsed.y:'Off chart'):fmt(c.parsed.y)+' streams' } } },
-     scales:{ y:{ reverse:true, min:1, max:CHART_SIZE, grid:{color:tt.grid}, ticks:{ callback:v=>'#'+v, stepSize:10 }, afterBuildTicks:a=>{ a.ticks=[1,10,20,30,40,50].map(v=>({value:v})); } },
+     scales:{ y:{ reverse:true, min:1, max:CHART_SIZE, grid:{color:tt.grid}, ticks:{ callback:v=>'#'+v, stepSize:10 }, afterBuildTicks:a=>{ const st=CHART_SIZE>50?20:10; a.ticks=[1,...Array.from({length:Math.floor(CHART_SIZE/st)},(_,i)=>(i+1)*st)].map(v=>({value:v})); } },
               y2:{ position:'right', beginAtZero:true, grid:{display:false}, ticks:{ callback:v=>abbr(v) } },
               x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } });
   hydrateThumbs();
@@ -1386,8 +1393,8 @@ window.openArtist = function(name, fromHash){
       ${tile('Best peak', bestPeak<999?'#'+bestPeak:'—', '', bestPeak===1?'gold':'')}
       ${tile('No.1 songs', no1s||'—', 'all seasons')}
       ${tile('Songs charted', list.filter(t=>t.allWoc>0).length, `of ${list.length} with streams`)}
-      ${tile(`Streams ${y}`, fmt(yTotal), '')}
-      ${tile('All-time streams', fmt(allTotal), 'collabs count in full')}
+      ${tile(`Streams ${y}`, bigNum(yTotal), '')}
+      ${tile('All-time streams', bigNum(allTotal), 'collabs count in full')}
     </div>
     ${top6.length?`<div class="panel"><h2>Chart runs · ${y}</h2><div class="chartbox tall"><canvas id="chartArtistTraj"></canvas></div>
       <div class="chip-row">${top6.map((t,i)=>`<span class="chip" onclick="openTrack('${t.id}')"><span class="cs-dot" style="background:${RACE_COLORS[i%RACE_COLORS.length]}"></span>${esc(t.name)}</span>`).join('')}</div></div>`:''}
