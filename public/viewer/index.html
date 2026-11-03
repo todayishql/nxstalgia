@@ -43,7 +43,6 @@
       <button data-view="overview" class="active">Overview</button>
       <button data-view="chart">Chart</button>
       <button data-view="analytics">Analytics</button>
-      <button data-view="alltime">All-time</button>
       <button data-view="awards">Awards</button>
       <button data-view="tracks">Songs</button>
     </nav>
@@ -133,6 +132,7 @@
       <button type="button" data-pane="race">No.1 Race</button>
       <button type="button" data-pane="songs">Songs</button>
       <button type="button" data-pane="artists">Artists</button>
+      <button type="button" data-pane="alltime">All-time</button>
     </div>
 
     <!-- ── Season ── -->
@@ -154,10 +154,7 @@
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <h2 style="margin:0">Top streams</h2>
-        <div class="pill-row" id="top100Filter" style="margin:0">
-          <button type="button" class="pill on" data-mode="season" onclick="setTop100Mode('season')">This season</button>
-          <button type="button" class="pill" data-mode="all" onclick="setTop100Mode('all')">All time</button>
-        </div>
+        <a class="link-more" onclick="setAnPane('alltime')">All-time Hall of Fame →</a>
       </div>
       <input type="text" id="top100Search" class="searchbar" style="margin-top:16px" placeholder="Filter by song or artist…">
       <div class="table-scroll">
@@ -296,15 +293,19 @@
     <!-- ── Artists ── -->
     <div class="anpane" data-pane="artists">
       <div class="panel">
-        <h2>Top artists this season</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <h2 style="margin:0" id="artistBoardTitle">Top artists this season</h2>
+          <div class="pill-row" id="artistScope" style="margin:0">
+            <button type="button" class="pill on" data-scope="season" onclick="setArtistScope('season')">This season</button>
+            <button type="button" class="pill" data-scope="all" onclick="setArtistScope('all')">All-time</button>
+          </div>
+        </div>
         <div id="artistBoard"></div>
         <div class="hint">Collaborations credit full streams to each artist. Click an artist to open their page.</div>
       </div>
     </div>
-  </section>
-
-  <!-- ══ ALL-TIME ══ -->
-  <section class="view" id="view-alltime">
+    <!-- ── All-time ── -->
+    <div class="anpane" data-pane="alltime">
     <div class="kpis" id="atKpis"></div>
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -312,17 +313,16 @@
         <input type="text" id="atSearch" placeholder="Search titles or artists…" style="max-width:260px">
       </div>
       <div class="pill-row" id="atRegions" style="margin:14px 0 0"></div>
-      <table style="margin-top:16px">
-        <thead><tr><th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th><th>Song</th>
-          <th id="atThPre" class="sortable" style="text-align:right" onclick="setAtSort('pre')">Pre-chart<i class="sar"></i></th>
-          <th id="atThOn" class="sortable" style="text-align:right" onclick="setAtSort('on')">On-chart<i class="sar"></i></th>
-          <th id="atThAll" class="sortable" style="text-align:right" onclick="setAtSort('all')">All-time<i class="sar"></i></th></tr></thead>
+      <div class="table-scroll open">
+      <table>
+        <thead id="atThead"></thead>
         <tbody id="atTable"></tbody>
       </table>
+      </div>
       <div id="atPager" class="race-pager"></div>
-      <div class="hint">The <strong>region</strong> pills re-run the whole ranking inside one region, so you get the <strong>top 100 of that region</strong> — ranks, "+/-" and the 100-song cut are all recomputed against that region alone. A song's region comes from its <strong>artists</strong> (tagged in /admin/artists); a collaboration across regions counts in each of them, and "Untagged" collects songs whose artists have no region yet. The Hall of Fame shows the <strong>top 100 songs on whichever column you're sorted by</strong> — click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to switch (click again to flip direction); each click re-picks the top 100 for that exact metric, not just re-orders the all-time 100. "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from the pre-chart ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort; <strong>NEW</strong> = the song sat outside the pre-chart top 100 and only reached the all-time top 100 thanks to its on-chart streams.</div>
+      <details class="help"><summary>How the Hall of Fame works</summary><div class="hint">The <strong>region</strong> pills re-run the whole ranking inside one region, so you get the <strong>top 100 of that region</strong> — ranks, "+/-" and the 100-song cut are all recomputed against that region alone. A song's region comes from its <strong>artists</strong> (tagged in /admin/artists); a collaboration across regions counts in each of them, and "Untagged" collects songs whose artists have no region yet. The Hall of Fame shows the <strong>top 100 songs on whichever column you're sorted by</strong> — click <strong>Pre-chart</strong> / <strong>On-chart</strong> / <strong>All-time</strong> to switch (click again to flip direction); each click re-picks the top 100 for that exact metric, not just re-orders the all-time 100. "#" is the rank on the column you sorted by. "Pre-chart" = total streams accumulated before the chart existed (before 2026). "+/-" = rank shift from the pre-chart ranking to the all-time ranking (how far on-chart streams moved the song), regardless of sort; <strong>NEW</strong> = the song sat outside the pre-chart top 100 and only reached the all-time top 100 thanks to its on-chart streams. Season columns appear once there is more than one season of data.</div></details>
     </div>
-    <div class="grid2">
+    <div>
       <div class="panel" id="atDistPanel">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <h2 style="margin:0">Stream distribution</h2>
@@ -331,11 +331,6 @@
         <div style="margin-top:14px" class="chartbox"><canvas id="chartAtDist"></canvas></div>
         <div class="hint" id="atDistSub" style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)"></div>
         <div class="hint">How many songs sit in each 100,000,000-stream bin — bin <em>i</em> covers [<em>i</em>×100M, (<em>i</em>+1)×100M). The x-axis runs up to the top song of the selected measure, so it rescales when you switch. Songs with no streams on that measure land in the first bin; their count is called out above.</div>
-      </div>
-      <div class="panel">
-        <h2>Top artists all-time</h2>
-        <div class="chartbox tall"><canvas id="chartAtArtists"></canvas></div>
-        <div class="hint">Collaborations credit full streams to each artist.</div>
       </div>
     </div>
     <div class="panel" id="atBreakdownPanel">
@@ -352,6 +347,8 @@
       </div>
       <div id="atBreakdown" style="margin-top:16px"></div>
     </div>
+    </div>
+
   </section>
 
   <!-- ══ AWARDS ══ -->
@@ -375,18 +372,31 @@
     </div>
   </section>
 
-  <!-- ══ BÀI HÁT ══ -->
+  <!-- ══ BÀI HÁT: danh sách bên trái, chi tiết bên phải ══ -->
   <section class="view" id="view-tracks">
-    <div class="controls">
-      <input type="text" id="trackSearch" class="searchbar" placeholder="Search songs or artists…">
-    </div>
-    <div id="trackDetail"></div>
-    <div class="panel">
-      <h2>Catalogue</h2>
-      <table>
-        <thead><tr><th></th><th>Song</th><th style="text-align:right">Peak</th><th style="text-align:right">WOC</th><th style="text-align:right">Streams (year)</th><th style="text-align:right">Streams (all-time)</th></tr></thead>
-        <tbody id="trackList"></tbody>
-      </table>
+    <div class="songs-layout">
+      <aside class="song-browser">
+        <div class="sb-search">
+          <input type="text" id="trackSearch" placeholder="Search songs or artists…  ( / )" autocomplete="off">
+        </div>
+        <div class="sb-controls">
+          <div class="seg" id="sbFilter">
+            <button type="button" data-f="all" class="on">All</button>
+            <button type="button" data-f="now">On chart</button>
+            <button type="button" data-f="no1">No.1s</button>
+          </div>
+          <select id="sbSort" aria-label="Sort songs">
+            <option value="all">All-time streams</option>
+            <option value="season">Season streams</option>
+            <option value="peak">Best peak</option>
+            <option value="woc">Weeks on chart</option>
+            <option value="name">A–Z</option>
+          </select>
+        </div>
+        <div class="sb-count" id="sbCount"></div>
+        <div class="sb-list" id="trackList" role="listbox" aria-label="Songs"></div>
+      </aside>
+      <div class="song-detail" id="trackDetail"></div>
     </div>
   </section>
 

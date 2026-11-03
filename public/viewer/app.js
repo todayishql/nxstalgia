@@ -558,6 +558,9 @@ function setAnPane(p){
 }
 function renderAnalytics(){
   const y=currentYear;
+  // All-time / Artists(all-time) không phụ thuộc season có dữ liệu hay không
+  if(anPane==='alltime'){ renderAllTime(); return; }
+  if(anPane==='artists' && artistScope==='all'){ renderArtistBoard(y, null); return; }
   $('recYear').textContent=y;
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
   if(!charted.length){
@@ -767,8 +770,16 @@ window.comparePair=function(a,b){
 };
 
 /* ── Artists: bảng xếp hạng nghệ sĩ mùa giải ── */
+let artistScope='season';
+window.setArtistScope=function(v){ artistScope=v; renderAnalytics(); };
 function renderArtistBoard(y, charted){
-  const S=t=>statsFor(t,y), m=new Map();
+  const all = artistScope==='all';
+  document.querySelectorAll('#artistScope .pill').forEach(b=>b.classList.toggle('on', b.dataset.scope===artistScope));
+  $('artistBoardTitle').textContent = all ? 'Top artists all-time' : 'Top artists this season';
+  if(all) charted=[...model.tracks.values()].filter(t=>t.allTotal>0);
+  // all-time: streams = allTotal (gồm pre-chart), peak/No.1 tính trên mọi season
+  const S = all ? (t=>({ total:t.allTotal, peak:t.allPeak??999 })) : (t=>statsFor(t,y));
+  const m=new Map();
   for(const t of charted) for(const a of t.artists){
     const k=artistKey(a); let r=m.get(k); if(!r){ r={ name:a, streams:0, songs:0, no1:0, peak:null, top:null }; m.set(k,r); }
     const s=S(t); r.streams+=s.total; r.songs++; if(s.peak===1) r.no1++; if(r.peak==null||s.peak<r.peak) r.peak=s.peak;
@@ -776,7 +787,7 @@ function renderArtistBoard(y, charted){
   }
   const list=[...m.values()].sort((a,b)=>b.streams-a.streams).slice(0,15);
   const grand=charted.reduce((a,t)=>a+S(t).total,0), max=list[0]?.streams||1;
-  $('artistBoard').innerHTML=`<table class="aboard"><thead><tr><th style="width:40px;text-align:center">#</th><th>Artist</th><th class="ab-bar-h">Season streams</th>
+  $('artistBoard').innerHTML=`<table class="aboard"><thead><tr><th style="width:40px;text-align:center">#</th><th>Artist</th><th class="ab-bar-h">${all?'All-time':'Season'} streams</th>
     <th style="text-align:right">Share</th><th style="text-align:right">Songs</th><th style="text-align:right">No.1s</th><th style="text-align:right">Best peak</th></tr></thead><tbody>${
     list.map((r,i)=>`<tr class="clickable" onclick="openArtist('${jsStr(r.name)}')">
       <td class="rank${i===0?' r1':''}">${i+1}</td>
@@ -785,61 +796,28 @@ function renderArtistBoard(y, charted){
       <td class="num">${grand?(r.streams/grand*100).toFixed(1):0}%</td>
       <td class="num">${r.songs}</td>
       <td class="num">${r.no1||'—'}</td>
-      <td class="num">#${r.peak}</td></tr>`).join('')}</tbody></table>`;
+      <td class="num">${r.peak&&r.peak<999?'#'+r.peak:'—'}</td></tr>`).join('')}</tbody></table>`;
   hydrateThumbs();
 }
 
-/* Top 100 streams — bảng kèm cover art, 2 chế độ:
-   'season' = chỉ 1 cột streams của season đang chọn (theo dropdown Season ở header);
-   'all'    = cột Pre-chart + 1 cột mỗi năm (model.yearList) + Total, sort theo bất kỳ cột nào
-              (kể cả Song/Artist) — click lại cùng cột để đảo chiều; click cột số khác sẽ CHỌN LẠI
-              top 100 theo đúng cột đó (giống quy ước Hall of Fame ở tab All-time).
-   Cột "#" = hạng theo cột số đang sort (hoặc Streams/Total khi sort theo Song/Artist) — hạng gắn với bài,
-   không đổi khi đảo chiều hay sort chữ. Ở All time, mỗi ô năm kèm hạng của bài trong năm đó (#n).
-   Ô search lọc theo tên bài/nghệ sĩ TRÊN top 100 đã chọn — số hạng vẫn giữ nguyên. */
-let top100State={ mode:'season', sortKey:'season', sortDir:'desc', q:'', rankKey:'season', expanded:false };
+/* Top streams (tab Season) — top 100 bài theo streams của season đang chọn, mặc định thu gọn Top 10.
+   Bảng all-time (Pre-chart / từng năm / Total) nằm ở Hall of Fame (tab All-time) — không lặp lại ở đây.
+   Cột "#" = hạng theo streams season — gắn với bài, không đổi khi sort theo cột khác.
+   Ô search lọc theo tên bài/nghệ sĩ TRÊN top 100 — số hạng vẫn giữ nguyên. */
+let top100State={ sortKey:'season', sortDir:'desc', q:'', expanded:false };
 const TOP_COLLAPSED=10;
+const TOP_COLS=[{key:'name', label:'Song', type:'str'}, {key:'artist', label:'Artist', type:'str'}, {key:'season', label:'Streams', type:'num'}];
 window.toggleTop100=function(){ top100State.expanded=!top100State.expanded; renderTop100(); };
 // Sparkline hạng theo tuần của 1 bài trong năm y (SVG inline, #1 ở trên, ngoài chart = khoảng trống)
-function rankSpark(t, y){
+function rankSpark(t, y, W=96, H=24){
   const mw=maxWeekOf(y); if(!mw) return '';
-  const W=96, H=24, wm=t.years.get(y)||new Map();
+  const wm=t.years.get(y)||new Map();
   const X=w=>mw>1?((w-1)/(mw-1))*W:W/2, Y=r=>2+((r-1)/(CHART_SIZE-1))*(H-4);
   let d='', pen=false, best=null;
   for(let w=1; w<=mw; w++){ const r=onChartRank(wm.get(w)); if(r==null){ pen=false; continue; }
     d+=(pen?'L':'M')+X(w).toFixed(1)+' '+Y(r).toFixed(1); pen=true; if(!best||r<best.r) best={w,r}; }
   return `<svg class="spark" viewBox="-2 0 ${W+4} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${d}"/>${best?`<circle cx="${X(best.w)}" cy="${Y(best.r)}" r="2.4"/>`:''}</svg>`;
 }
-function top100Columns(){
-  const cols=[{key:'name', label:'Song', type:'str'}, {key:'artist', label:'Artist', type:'str'}];
-  if(top100State.mode==='all'){
-    cols.push({key:'pre', label:'Pre-chart', type:'num'});
-    for(const yr of model.yearList) cols.push({key:'y'+yr, label:String(yr), type:'num'});
-    cols.push({key:'total', label:'Total', type:'num'});
-  } else cols.push({key:'season', label:'Streams', type:'num'});
-  return cols;
-}
-function top100Value(t, key, y){
-  if(key==='name') return t.name;
-  if(key==='artist') return t.artist;
-  if(key==='season') return statsFor(t,y).total;
-  if(key==='pre') return t.baseline||0;
-  if(key==='total') return t.allTotal||0;
-  if(key[0]==='y') return statsFor(t, +key.slice(1)).total;
-  return 0;
-}
-// Hạng kiểu thi đấu (1,2,2,4…) theo 1 cột số, chỉ tính bài có streams > 0 ở cột đó.
-function top100Ranks(list, key, y){
-  const rows=list.map(t=>[t, top100Value(t,key,y)]).filter(r=>r[1]>0).sort((a,b)=>b[1]-a[1]);
-  const m=new Map();
-  rows.forEach((r,i)=>m.set(r[0].id, i>0 && r[1]===rows[i-1][1] ? m.get(rows[i-1][0].id) : i+1));
-  return m;
-}
-window.setTop100Mode=function(mode){
-  if(top100State.mode===mode) return;
-  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc', q:top100State.q, rankKey:null, expanded:top100State.expanded };
-  renderTop100();
-};
 window.setTop100Sort=function(key){
   const st=top100State;
   if(st.sortKey===key) st.sortDir = st.sortDir==='asc' ? 'desc' : 'asc';
@@ -848,75 +826,52 @@ window.setTop100Sort=function(key){
 };
 function renderTop100(){
   const y=currentYear, st=top100State;
-  document.querySelectorAll('#top100Filter .pill').forEach(b=>b.classList.toggle('on', b.dataset.mode===st.mode));
-  const cols=top100Columns();
-  if(st.sortKey!=='rank' && !cols.find(c=>c.key===st.sortKey)) st.sortKey = st.mode==='season' ? 'season' : 'total'; // năm vừa bị xoá khỏi cột đang sort
-  const primaryKey = st.mode==='season' ? 'season' : 'total';
-  const base = st.mode==='season'
-    ? [...model.tracks.values()].filter(t=>statsFor(t,y).woc>0)
-    : [...model.tracks.values()].filter(t=>t.allTotal>0);
-
+  const val=(t,k)=> k==='name'?t.name : k==='artist'?t.artist : statsFor(t,y).total;
+  const base=[...model.tracks.values()].filter(t=>statsFor(t,y).total>0);
   if(!base.length){
     $('top100Thead').innerHTML='';
-    $('top100Table').innerHTML=`<tr><td colspan="${cols.length+2}"><div class="empty">${st.mode==='season'?'No data yet for this year.':'No streams recorded yet.'}</div></td></tr>`;
-    $('top100Hint').textContent='';
+    $('top100Table').innerHTML='<tr><td colspan="6"><div class="empty">No data yet for this year.</div></td></tr>';
+    $('top100Hint').textContent=''; $('top100More').innerHTML='';
     return;
   }
-
-  // Cột quyết định roster + số hạng (st.rankKey): cột số đang sort. Sort theo Song/Artist/# thì giữ
-  // cột số đã chọn gần nhất (mặc định Streams/Total) -> chỉ đổi thứ tự hiển thị, không đổi top 100.
-  const sortCol=cols.find(c=>c.key===st.sortKey);
-  if(sortCol && sortCol.type==='num') st.rankKey=sortCol.key;
-  if(!cols.find(c=>c.key===st.rankKey)) st.rankKey=primaryKey;
-  const rankKey=st.rankKey;
-  const rankCol=cols.find(c=>c.key===rankKey);
-  const ranks=top100Ranks(base, rankKey, y);
-  const roster=base.filter(t=>ranks.has(t.id)).sort((a,b)=>ranks.get(a.id)-ranks.get(b.id)).slice(0,100);
-  // Hạng của từng cột số (dùng cho badge #n trong ô năm/Pre-chart/Total ở chế độ All time).
-  const colRanks = st.mode==='all' ? Object.fromEntries(cols.filter(c=>c.type==='num').map(c=>[c.key, c.key===rankKey?ranks:top100Ranks(base,c.key,y)])) : {};
-
+  // hạng kiểu thi đấu (1,2,2,4…) theo streams season
+  const byS=[...base].sort((a,b)=>val(b,'season')-val(a,'season'));
+  const ranks=new Map(); byS.forEach((t,i)=>ranks.set(t.id, i>0 && val(t,'season')===val(byS[i-1],'season') ? ranks.get(byS[i-1].id) : i+1));
+  const roster=byS.slice(0,100);
   const q=st.q.trim().toLowerCase();
   const shown = q ? roster.filter(t=>(t.name+' '+t.artist).toLowerCase().includes(q)) : roster;
-  const valFn = st.sortKey==='rank' ? (t=>ranks.get(t.id)) : (t=>top100Value(t,st.sortKey,y));
-  const isStr = sortCol && sortCol.type==='str';
-  const cmpAsc=(a,b)=> (isStr ? String(valFn(a)).localeCompare(String(valFn(b))) : valFn(a)-valFn(b)) || ranks.get(a.id)-ranks.get(b.id);
+  const isStr = st.sortKey==='name'||st.sortKey==='artist';
+  const vf = st.sortKey==='rank' ? (t=>ranks.get(t.id)) : (t=>val(t,st.sortKey));
+  const cmpAsc=(a,b)=> (isStr ? String(vf(a)).localeCompare(String(vf(b))) : vf(a)-vf(b)) || ranks.get(a.id)-ranks.get(b.id);
   const sortedAll=[...shown].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
   // mặc định chỉ hiện Top 10; đang lọc theo tên thì hiện hết kết quả
   const sorted = (st.expanded || q) ? sortedAll : sortedAll.slice(0, TOP_COLLAPSED);
-  const spark = st.mode==='season';
-  const barMax = Math.max(1, ...roster.map(t=>top100Value(t,primaryKey,y)));
+  const barMax = Math.max(1, val(roster[0],'season'));
 
   const arrow=k=>`<i class="sar">${st.sortKey===k?(st.sortDir==='desc'?'▼':'▲'):''}</i>`;
   $('top100Thead').innerHTML = `<tr>
-    <th class="sortable${st.sortKey==='rank'?' on':''}" style="text-align:center;width:52px" title="Rank by ${esc(rankCol.label)}" onclick="setTop100Sort('rank')">#${arrow('rank')}</th>
-    <th style="width:52px"></th>${cols.map(c=>
+    <th class="sortable${st.sortKey==='rank'?' on':''}" style="text-align:center;width:52px" onclick="setTop100Sort('rank')">#${arrow('rank')}</th>
+    <th style="width:52px"></th>${TOP_COLS.map(c=>
     `<th class="sortable${st.sortKey===c.key?' on':''}"${c.type==='num'?' style="text-align:right"':''} onclick="setTop100Sort('${c.key}')">${esc(c.label)}${arrow(c.key)}</th>`
-  ).join('')}${spark?'<th style="text-align:center">Run</th>':''}</tr>`;
+  ).join('')}<th style="text-align:center">Run</th></tr>`;
 
-  $('top100Table').innerHTML = sorted.length ? sorted.map(t=>{ const r=ranks.get(t.id); return `<tr>
+  $('top100Table').innerHTML = sorted.length ? sorted.map(t=>{ const r=ranks.get(t.id), v=val(t,'season'); return `<tr class="clickable" onclick="openTrack('${t.id}')">
     <td class="rank r${r<=3?r:''}">${r}</td>
-    <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
-    ${cols.map(c=>{
-      if(c.key==='name') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}</div></td>`;
-      if(c.key==='artist') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-artist">${esc(t.artist)}</div></td>`;
-      const v=top100Value(t,c.key,y);
-      const cr=colRanks[c.key]?.get(t.id);
-      const bar = c.key===primaryKey && v ? ` style="--bar:${(v/barMax*100).toFixed(1)}%"` : '';
-      return `<td class="num${bar?' barcell':''}"${bar}>${v?fmt(v):'—'}${cr?`<span class="t100-rk${cr<=3?' top':''}">#${cr}</span>`:''}</td>`;
-    }).join('')}${spark?`<td class="sparkcell">${rankSpark(t,y)}</td>`:''}
+    <td class="thumbcell">${thumbHTML(t)}</td>
+    <td><div class="t-name">${esc(t.name)}</div></td>
+    <td><div class="t-artist">${esc(t.artist)}</div></td>
+    <td class="num barcell" style="--bar:${(v/barMax*100).toFixed(1)}%">${fmt(v)}</td>
+    <td class="sparkcell">${rankSpark(t,y)}</td>
   </tr>`; }).join('')
-    : `<tr><td colspan="${cols.length+3}"><div class="empty">No song or artist matches “${esc(st.q.trim())}”.</div></td></tr>`;
+    : `<tr><td colspan="6"><div class="empty">No song or artist matches “${esc(st.q.trim())}”.</div></td></tr>`;
   hydrateThumbs();
 
   // gọn (Top 10) thì bỏ giới hạn chiều cao khung cuộn để không cắt mất hàng cuối
   $('top100Table').closest('.table-scroll')?.classList.toggle('open', !(st.expanded||q));
-  const more=$('top100More');
-  if(more) more.innerHTML = (!q && sortedAll.length>TOP_COLLAPSED)
+  $('top100More').innerHTML = (!q && sortedAll.length>TOP_COLLAPSED)
     ? `<button type="button" class="btn ghost small" onclick="toggleTop100()">${st.expanded?'Show top '+TOP_COLLAPSED:'Show all '+sortedAll.length}</button>` : '';
   const cnt = q ? `${sorted.length} of top ${roster.length}` : `Top ${roster.length}`;
-  $('top100Hint').textContent = st.mode==='season'
-    ? `${cnt} song${roster.length===1?'':'s'} by streams in ${y}. # = rank by streams this season. Click a column to sort — click again to flip direction.`
-    : `${cnt} song${roster.length===1?'':'s'} all-time, ranked by ${rankCol.label}. Each stream cell shows the song's rank (#n) in that column. Click a column to sort; clicking a different stream column re-picks the top 100 for that exact column.`;
+  $('top100Hint').textContent = `${cnt} song${roster.length===1?'':'s'} by streams in ${y}. Run = weekly rank this season. Click a column to sort — click again to flip direction.`;
 }
 
 /* ───────── The #1 Race — Champions ───────── */
@@ -1176,117 +1131,294 @@ function runCompare(){
 }
 
 /* ───────── render: tracks & artist ───────── */
-function renderTrackList(){
-  const y=currentYear;
+/* ───────── Songs: danh sách (trái) + chi tiết bài / nghệ sĩ (phải) ─────────
+   Link chia sẻ được: #song/<id>, #artist/<tên> — nút Back của trình duyệt quay lại mục trước. */
+let sbState={ f:'all', sort:'all', limit:120, sel:null };   // sel = 'song:<id>' | 'artist:<key>'
+const SB_PAGE=120;
+function sbList(){
+  const y=currentYear, w=maxWeekOf(y);
   const q=$('trackSearch').value.trim().toLowerCase();
   let list=[...model.tracks.values()].filter(t=>t.allTotal>0 || t.user);
-  if(q) list=list.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q));
-  list.sort((a,b)=>b.allTotal-a.allTotal);
-  $('trackList').innerHTML = list.slice(0,60).map(t=>{
-    const s=statsFor(t,y);
-    return `<tr class="clickable" onclick="openTrack('${t.id}')">
-      <td class="thumbcell">${thumbHTML(t)}</td>
-      <td><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}</div></td>
-      <td class="num">${s.peak?'#'+s.peak:'—'}</td>
-      <td class="num">${s.woc}</td>
-      <td class="num">${fmt(s.total)}</td>
-      <td class="num">${fmt(t.allTotal)}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="6"><div class="empty">No songs found.</div></td></tr>';
-  hydrateThumbs();
+  if(sbState.f==='now') list=list.filter(t=>onChartRank(entryAt(t,y,w))!=null);
+  else if(sbState.f==='no1') list=list.filter(t=>t.allPeak===1);
+  if(q) list=list.filter(t=>(t.name+' '+t.artist).toLowerCase().includes(q));
+  const S=t=>statsFor(t,y);
+  const by={
+    all:(a,b)=>b.allTotal-a.allTotal,
+    season:(a,b)=>S(b).total-S(a).total || b.allTotal-a.allTotal,
+    peak:(a,b)=>(a.allPeak??999)-(b.allPeak??999) || b.allTotal-a.allTotal,
+    woc:(a,b)=>b.allWoc-a.allWoc || b.allTotal-a.allTotal,
+    name:(a,b)=>a.name.localeCompare(b.name),
+  }[sbState.sort];
+  return list.sort(by);
 }
-window.openTrack = function(id, yPick){
-  switchView('tracks');
+function renderTrackList(){
+  const y=currentYear, w=maxWeekOf(y);
+  const list=sbList();
+  document.querySelectorAll('#sbFilter button').forEach(b=>b.classList.toggle('on', b.dataset.f===sbState.f));
+  $('sbCount').textContent = list.length+' song'+(list.length===1?'':'s');
+  const metric=t=>{
+    if(sbState.sort==='season') return fmt(statsFor(t,y).total);
+    if(sbState.sort==='peak') return t.allPeak?'#'+t.allPeak:'—';
+    if(sbState.sort==='woc') return t.allWoc+' wks';
+    return abbr(t.allTotal);
+  };
+  const shown=list.slice(0, sbState.limit);
+  $('trackList').innerHTML = shown.map(t=>{
+    const r=onChartRank(entryAt(t,y,w));
+    const on = sbState.sel==='song:'+t.id;
+    return `<div class="sb-item${on?' on':''}" role="option" aria-selected="${on}" data-id="${t.id}" onclick="openTrack('${t.id}')">
+      ${thumbHTML(t)}
+      <div class="sb-t"><div class="t-name">${esc(t.name)}</div><div class="t-artist">${esc(t.artist)}</div></div>
+      <div class="sb-m">${r!=null?`<span class="sb-now${r===1?' no1':''}">#${r}</span>`:''}<span class="sb-v">${metric(t)}</span></div>
+    </div>`;
+  }).join('') + (list.length>shown.length ? `<button type="button" class="btn ghost small sb-more" onclick="sbMore()">Show ${Math.min(SB_PAGE, list.length-shown.length)} more</button>` : '')
+    || '<div class="empty">No songs found.</div>';
+  hydrateThumbs();
+  // vào tab lần đầu chưa chọn gì -> mở bài đang #1 (hoặc bài đầu danh sách)
+  if(!sbState.sel){ const top=w?weekChart(y,w)[0]:null; const t=top?top.t:list[0]; if(t) openTrack(t.id, null, true); }
+}
+window.sbMore=function(){ sbState.limit+=SB_PAGE; renderTrackList(); };
+function markSelected(){
+  document.querySelectorAll('#trackList .sb-item').forEach(el=>{
+    const on = sbState.sel==='song:'+el.dataset.id;
+    el.classList.toggle('on', on); el.setAttribute('aria-selected', on);
+    if(on) el.scrollIntoView({block:'nearest'});
+  });
+}
+// Đổi hash mà không mở lại view; replace=true khi tự chọn mặc định (không tạo mục history)
+function setRoute(h, replace){
+  if(location.hash===h) return;
+  try{ history[replace?'replaceState':'pushState'](null,'',h); }catch(e){ location.hash=h; }
+}
+function routeFromHash(){
+  const h=decodeURIComponent(location.hash.slice(1));
+  if(h.startsWith('song/')){ const id=h.slice(5); if(model.tracks.has(id)){ openTrack(id, null, true, true); return true; } }
+  if(h.startsWith('artist/')){ openArtist(h.slice(7), true); return true; }
+  return false;
+}
+// mở trang trong view Songs mà không vẽ lại danh sách nếu đang ở đó
+function ensureSongsView(){
+  const active=document.querySelector('nav button.active')?.dataset.view;
+  if(active!=='tracks'){
+    document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view==='tracks'));
+    document.querySelectorAll('.view').forEach(s=>s.classList.toggle('active', s.id==='view-tracks'));
+    renderTrackList();
+  }
+}
+
+// Các mốc đáng nhớ của 1 bài, tính liên tục qua mọi season
+function songMilestones(t){
+  const weeks=[];
+  for(const [y,wm] of t.years) for(const [w,e] of wm) weeks.push({ y, w, gw:gwOf(y,w), rank:onChartRank(e), stream:e.stream||0 });
+  weeks.sort((a,b)=>a.gw-b.gw);
+  const on=weeks.filter(x=>x.rank!=null);
+  if(!on.length) return [];
+  const L=[], lbl=x=>`W${x.w}/${yy(x.y)}`;
+  const debut=on[0];
+  L.push({ ic:'✨', t:`Debuted at <b>#${debut.rank}</b>`, d:lbl(debut) });
+  // mốc top 10 / top 5 / No.1 — cùng 1 tuần thì chỉ giữ mốc cao nhất
+  const tiers=[[10,'top 10'],[5,'top 5'],[1,'No.1']].map(([cut,txt])=>({ cut, txt, f:on.find(x=>x.rank<=cut) }));
+  tiers.forEach((tr,i)=>{
+    const {cut,txt,f}=tr; if(!f) return;
+    if(tiers.slice(i+1).some(o=>o.f===f)) return;
+    if(f===debut){ if(cut===1) L.push({ ic:'🏆', t:'Debuted straight at <b>No.1</b>', d:lbl(f) }); return; }
+    L.push({ ic:cut===1?'🏆':'📈', t:cut===1?'First week at <b>No.1</b>':`First week in the <b>${txt}</b> (#${f.rank})`, d:lbl(f) });
+  });
+  let jump=null;
+  for(let i=1;i<weeks.length;i++){ const a=weeks[i-1], b=weeks[i]; if(b.gw===a.gw+1 && a.rank!=null && b.rank!=null && a.rank-b.rank>(jump?.d||0)) jump={ d:a.rank-b.rank, x:b, from:a.rank }; }
+  if(jump && jump.d>=3) L.push({ ic:'🚀', t:`Biggest climb: <b>+${jump.d}</b> (#${jump.from} → #${jump.x.rank})`, d:lbl(jump.x) });
+  const best=[...weeks].sort((a,b)=>b.stream-a.stream)[0];
+  if(best && best.stream) L.push({ ic:'🔥', t:`Best week: <b>${fmt(best.stream)}</b> streams`, d:lbl(best) });
+  let re=0; for(let i=1;i<on.length;i++) if(on[i].gw>on[i-1].gw+1) re++;
+  if(re) L.push({ ic:'🔁', t:`Re-entered the chart <b>${re}</b> time${re>1?'s':''}`, d:'' });
+  for(const m of [10,20,30,40,50]) if(on.length>=m){ const x=on[m-1]; if(m===Math.floor(on.length/10)*10) L.push({ ic:'🎖️', t:`Reached <b>${m} weeks</b> on chart`, d:lbl(x) }); }
+  return L;
+}
+
+window.openTrack = function(id, yPick, quiet, fromHash){
   const t=model.tracks.get(id); if(!t) return;
+  sbState.sel='song:'+id;   // đặt trước để danh sách không tự mở bài mặc định
+  ensureSongsView();
+  if(!fromHash) setRoute('#song/'+encodeURIComponent(id), quiet);
+  markSelected();
   const yearsOf=[...t.years.keys()].sort((a,b)=>a-b);
   const y = yPick!=null ? yPick : (t.years.has(currentYear)?currentYear:(yearsOf[yearsOf.length-1]||currentYear));
-  const s=statsFor(t,y);
-  const chips = yearsOf.length>1 ? `<div class="pill-row" style="margin:10px 0 0">${yearsOf.map(yr=>`<span class="pill ${yr===y?'on':''}" onclick="event.stopPropagation();openTrack('${t.id}',${yr})">${yr}</span>`).join('')}</div>` : '';
+  const s=statsFor(t,y), mw=maxWeekOf(y), lw=maxWeekOf(currentYear);
+  // trạng thái tuần mới nhất
+  const nowR=onChartRank(entryAt(t,currentYear,lw));
+  const mv=nowR!=null?movement(t,currentYear,lw):null;
+  const status = nowR!=null
+    ? `<span class="st-pill on">#${nowR} this week${mv&&mv.cls==='up'?` · ▲${mv.txt.slice(1)}`:mv&&mv.cls==='down'?` · ▼${mv.txt.slice(1)}`:mv&&(mv.cls==='new'||mv.cls==='re')?' · '+mv.txt:''}</span>`
+    : '<span class="st-pill">Off the chart this week</span>';
+  const tags=[t.genre, ...[...trackRegions(t)].filter(r=>r!=='none').map(r=>AT_REGION_LABEL[r]||r)].filter(Boolean);
+  // tuần ở peak + tuần đầu
+  const wm=t.years.get(y)||new Map();
+  let atPeak=0, peakW=null; for(const [w,e] of wm) if(s.peak!=null && e.rank===s.peak){ atPeak++; if(peakW==null||w<peakW) peakW=w; }
+  const no1w=[...wm.values()].filter(e=>e.rank===1).length;
+  const awards=(DATA.awards||[]).filter(a=>a.type==='track' && a.subject===t.id).sort((a,b)=>b.year-a.year || b.won-a.won);
+  const more=[...model.tracks.values()].filter(o=>o.id!==t.id && o.artists.some(a=>t.artists.includes(a)) && o.allTotal>0).sort((a,b)=>b.allTotal-a.allTotal).slice(0,6);
+  const ms=songMilestones(t);
+  const tile=(lbl,val,sub,cls='')=>`<div class="tile ${cls}"><div class="tl">${lbl}</div><div class="tv">${val}</div><div class="ts">${sub||'&nbsp;'}</div></div>`;
+
+  // bảng từng tuần
+  const rows=[];
+  for(let w=1; w<=mw; w++){
+    const e=wm.get(w); if(!e) continue;
+    const prev=entryAtGw(t, gwOf(y,w)-1);
+    const r=onChartRank(e), pr=onChartRank(prev);
+    const d = r!=null && pr!=null ? pr-r : null;
+    const pc=pctCell(e.stream||0, prev?prev.stream:0);
+    rows.push(`<tr><td>W${w}</td><td class="wk-rk${r===1?' no1':''}">${r!=null?'#'+r:'<span class="faint">—</span>'}</td>
+      <td class="wk-mv ${d>0?'up':d<0?'down':''}">${d==null?(r!=null&&pr==null?'<span class="mv new">IN</span>':''):d===0?'=':(d>0?'+':'')+d}</td>
+      <td class="num">${fmt(e.stream||0)}</td><td class="num wk-pct${pc.cls}">${pc.txt}</td></tr>`);
+  }
+
   $('trackDetail').innerHTML = `
-    <div class="panel">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-        <div style="display:flex;gap:14px;align-items:center">
-          ${thumbHTML(t,'big')}
-          <div>
-            <h2 style="font-size:22px;margin-bottom:2px">${esc(t.name)}</h2>
-            <div class="t-artist" style="font-size:14px">${t.artists.map(a=>`<span class="alink" onclick="openArtist('${escAttr(a)}')">${esc(a)}</span>`).join(', ')}</div>
-            ${chips}
-          </div>
-        </div>
-        <div style="display:flex;gap:18px;font-family:var(--mono);font-size:13px;color:var(--muted);flex-wrap:wrap">
-          <span>Peak ${y} <b style="color:var(--gold)">${s.peak?'#'+s.peak:'—'}</b></span>
-          <span>WOC <b style="color:var(--text)">${s.woc}</b></span>
-          <span>Streams ${y} <b style="color:var(--text)">${fmt(s.total)}</b></span>
-          ${t.baseline?`<span>Pre-chart <b style="color:var(--text)">${fmt(t.baseline)}</b></span>`:''}
-          <span>All-time <b style="color:var(--text)">${fmt(t.allTotal)}</b></span>
-          <span>#1 streak <b style="color:var(--text)">${s.streak||0}</b></span>
+    <div class="sd-hero">
+      ${thumbHTML(t,'hero')}
+      <div class="sd-head">
+        <div class="sd-kicker">Song${tags.length?' · '+tags.map(esc).join(' · '):''}</div>
+        <h2 class="sd-title">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</h2>
+        <div class="sd-artists">${t.artists.map(a=>`<a class="alink" onclick="openArtist('${jsStr(a)}')">${esc(a)}</a>`).join('<span class="sep">,</span> ')}</div>
+        <div class="sd-actions">${status}
+          <button type="button" class="btn ghost small" onclick="compareFrom('${t.id}')">Compare</button>
+          <button type="button" class="btn ghost small" onclick="copyLink()">Copy link</button>
         </div>
       </div>
-      <div class="chartbox" style="margin-top:14px"><canvas id="chartTraj"></canvas></div>
+    </div>
+    ${yearsOf.length>1?`<div class="pill-row sd-years">${yearsOf.map(yr=>`<button type="button" class="pill ${yr===y?'on':''}" onclick="openTrack('${t.id}',${yr})">Season ${yr}</button>`).join('')}</div>`:''}
+    <div class="tiles">
+      ${tile('Peak', s.peak?'#'+s.peak:'—', s.peak?`${atPeak} wk${atPeak===1?'':'s'} at peak · W${peakW}`:'', s.peak===1?'gold':'')}
+      ${tile('Weeks on chart', s.woc, `${t.allWoc} across all seasons`)}
+      ${tile('Weeks at No.1', no1w||'—', s.streak>1?`longest run ${s.streak} wks`:'')}
+      ${tile(`Streams ${y}`, fmt(s.total), s.woc?`${fmt(Math.round(s.total/s.woc))} / chart week`:'')}
+      ${tile('All-time streams', fmt(t.allTotal), t.baseline?`${fmt(t.baseline)} pre-chart`:'')}
+    </div>
+    <div class="panel">
+      <div class="race-head" style="margin-bottom:8px"><h2 style="margin:0">Chart run · ${y}</h2>
+        <div class="legend-inline"><span><i class="li-line"></i>Rank</span><span><i class="li-bar"></i>Streams</span></div></div>
+      <div class="chartbox"><canvas id="chartTraj"></canvas></div>
+      <div class="sd-strip" style="--n:${mw}">${Array.from({length:mw},(_,k)=>{ const r=onChartRank(wm.get(k+1)); const q=r==null?'':r===1?'q1':r<=5?'q2':r<=10?'q3':r<=20?'q4':'q5'; return `<i class="${q}" title="W${k+1}${r?' · #'+r:' · off chart'}"></i>`; }).join('')}</div>
+    </div>
+    <div class="grid2 sd-grid">
+      <div class="panel">
+        <h2>Week by week</h2>
+        <div class="table-scroll wk-table"><table><thead><tr><th>Week</th><th>Rank</th><th>+/-</th><th style="text-align:right">Streams</th><th style="text-align:right">%</th></tr></thead>
+          <tbody>${rows.reverse().join('')||'<tr><td colspan="5"><div class="empty">No weeks this season.</div></td></tr>'}</tbody></table></div>
+      </div>
+      <div>
+        <div class="panel">
+          <h2>Milestones</h2>
+          ${ms.length?`<ul class="ms">${ms.map(m=>`<li><span class="ms-ic">${m.ic}</span><span class="ms-t">${m.t}</span><span class="ms-d">${m.d}</span></li>`).join('')}</ul>`:'<div class="empty" style="padding:12px 0">Not charted yet.</div>'}
+        </div>
+        ${awards.length?`<div class="panel"><h2>Awards</h2><ul class="ms">${awards.map(a=>`<li><span class="ms-ic">${a.won?'🏆':'·'}</span><span class="ms-t">${a.won?'<b>Won</b>':'Nominated'} — ${esc(a.category)}</span><span class="ms-d">${a.year}</span></li>`).join('')}</ul></div>`:''}
+        ${more.length?`<div class="panel"><h2>More by ${esc(t.artists[0])}${t.artists.length>1?' & co.':''}</h2>
+          <div class="mini-list">${more.map(o=>`<div class="mini clickable" onclick="openTrack('${o.id}')">${thumbHTML(o)}<div><div class="t-name">${esc(o.name)}</div><div class="t-artist">${o.allPeak?'Peak #'+o.allPeak+' · ':''}${abbr(o.allTotal)} streams</div></div></div>`).join('')}</div></div>`:''}
+      </div>
     </div>`;
-  const wm=t.years.get(y)||new Map();
-  const ws=[...wm.entries()].filter(([w,e])=>e.rank!=null).sort((a,b)=>a[0]-b[0]);
-  const maxRank=Math.max(51,...ws.map(([w,e])=>e.rank));
+
+  // combo: cột streams (trục phải, nhạt) + line hạng (trục trái, đảo ngược)
   const tt=TH();
-  drawChart('chartTraj','line',{
-    labels: ws.map(([w])=>'W'+w),
-    datasets:[{ data: ws.map(([w,e])=>e.rank), borderColor:tt.ink, borderWidth:2,
-      pointBackgroundColor: ws.map(([w,e])=>e.rank===1?tt.red:'transparent'),
-      pointBorderColor: ws.map(([w,e])=>e.rank===1?tt.red:tt.ink), pointBorderWidth:1.5,
-      pointRadius: ws.map(([w,e])=>e.rank===1?6:3), tension:.25, fill:false }]
-  },{ plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'#'+c.parsed.y}} },
-     scales:{ y:{ reverse:true, min:1, max:maxRank, grid:{color:tt.grid}, ticks:{ callback:v=>'#'+v } },
+  const labels=[], rk=[], st=[];
+  for(let w=1; w<=mw; w++){ const e=wm.get(w); labels.push('W'+w); rk.push(onChartRank(e)); st.push(e?e.stream||0:null); }
+  drawChart('chartTraj','bar',{ labels, datasets:[
+    { type:'line', label:'Rank', data:rk, yAxisID:'y', borderColor:tt.red, backgroundColor:tt.red, borderWidth:2.5, tension:0, spanGaps:false,
+      pointRadius:rk.map(r=>r===1?4:0), pointHoverRadius:5, order:1 },
+    { type:'bar', label:'Streams', data:st, yAxisID:'y2', backgroundColor:fadeHex(cssv('--faint')||'#7A8496','40'), borderRadius:3, barPercentage:.9, categoryPercentage:1, order:2 }
+  ]},{ interaction:{ mode:'index', intersect:false },
+     plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>c.dataset.label==='Rank'?(c.parsed.y!=null?'Rank #'+c.parsed.y:'Off chart'):fmt(c.parsed.y)+' streams' } } },
+     scales:{ y:{ reverse:true, min:1, max:CHART_SIZE, grid:{color:tt.grid}, ticks:{ callback:v=>'#'+v, stepSize:10 }, afterBuildTicks:a=>{ a.ticks=[1,10,20,30,40,50].map(v=>({value:v})); } },
+              y2:{ position:'right', beginAtZero:true, grid:{display:false}, ticks:{ callback:v=>abbr(v) } },
               x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } });
   hydrateThumbs();
-  document.querySelector('#view-tracks').scrollIntoView({behavior:'smooth'});
+  scrollDetailIntoView();
+};
+function scrollDetailIntoView(){
+  // màn hẹp: danh sách nằm trên -> cuộn xuống phần chi tiết; màn rộng: lên đầu khung chi tiết
+  const el=$('trackDetail'); if(!el) return;
+  const top=el.getBoundingClientRect().top+window.scrollY-80;
+  if(window.innerWidth<=900 || window.scrollY>top) window.scrollTo({ top, behavior:'smooth' });
 }
-window.openArtist = function(name){
-  switchView('tracks');
+window.compareFrom=function(id){
+  const t=model.tracks.get(id); if(!t) return;
+  switchView('analytics'); setAnPane('songs');
+  $('cmpA').value=t.name+' — '+t.artist; $('cmpB').value=''; $('cmpB').focus();
+  $('cmpB').scrollIntoView({ behavior:'smooth', block:'center' });
+};
+window.copyLink=function(){
+  const url=location.href;
+  (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>toast('Link copied'), ()=>toast(url));
+};
+
+window.openArtist = function(name, fromHash){
   const y=currentYear;
-  const list=[...model.tracks.values()].filter(t=>t.artists.includes(name) && (t.allTotal>0||t.user));
+  const key=artistKey(name);
+  const list=[...model.tracks.values()].filter(t=>t.artists.some(a=>artistKey(a)===key) && (t.allTotal>0||t.user));
   if(!list.length){ toast('No data yet for this artist'); return; }
+  sbState.sel='artist:'+key;
+  ensureSongsView(); markSelected();
+  if(!fromHash) setRoute('#artist/'+encodeURIComponent(name));
+  name = list[0].artists.find(a=>artistKey(a)===key) || name;
   list.sort((a,b)=>statsFor(b,y).total-statsFor(a,y).total || b.allTotal-a.allTotal);
   const yTotal=list.reduce((s,t)=>s+statsFor(t,y).total,0);
   const allTotal=list.reduce((s,t)=>s+t.allTotal,0);
-  const no1s=list.filter(t=>statsFor(t,y).peak===1).length;
-  const bestPeak=Math.min(...list.map(t=>statsFor(t,y).peak||999));
+  const no1s=list.filter(t=>t.allPeak===1).length;
+  const bestPeak=Math.min(...list.map(t=>t.allPeak||999));
+  const meta=ARTMETA.get(key)||{};
+  const tags=[meta.gender&&({male:'Male',female:'Female',group:'Group'}[meta.gender]||meta.gender), meta.region&&(AT_REGION_LABEL[meta.region]||meta.region), ...(meta.genres||[])].filter(Boolean);
+  const lw=maxWeekOf(y);
+  const nowOn=list.filter(t=>onChartRank(entryAt(t,y,lw))!=null).length;
   const top6=list.filter(t=>statsFor(t,y).woc>0).slice(0,6);
+  const tile=(lbl,val,sub,cls='')=>`<div class="tile ${cls}"><div class="tl">${lbl}</div><div class="tv">${val}</div><div class="ts">${sub||'&nbsp;'}</div></div>`;
   $('trackDetail').innerHTML = `
-    <div class="panel">
-      <h2 style="font-size:24px">${esc(name)}</h2>
-      <div style="display:flex;gap:20px;font-family:var(--mono);font-size:13px;color:var(--muted);flex-wrap:wrap;margin-top:6px">
-        <span>Songs on chart <b style="color:var(--text)">${list.length}</b></span>
-        <span>No.1 in ${y} <b style="color:var(--gold)">${no1s}</b></span>
-        <span>Best peak <b style="color:var(--text)">${bestPeak<999?'#'+bestPeak:'—'}</b></span>
-        <span>Streams ${y} <b style="color:var(--text)">${fmt(yTotal)}</b></span>
-        <span>All-time streams <b style="color:var(--text)">${fmt(allTotal)}</b></span>
+    <div class="sd-hero">
+      ${thumbHTML(list[0],'hero round')}
+      <div class="sd-head">
+        <div class="sd-kicker">Artist${tags.length?' · '+tags.map(esc).join(' · '):''}</div>
+        <h2 class="sd-title">${esc(name)}</h2>
+        <div class="sd-artists">${list.length} song${list.length>1?'s':''} with streams</div>
+        <div class="sd-actions"><span class="st-pill${nowOn?' on':''}">${nowOn?nowOn+' song'+(nowOn>1?'s':'')+' on chart this week':'Nothing on the chart this week'}</span>
+          <button type="button" class="btn ghost small" onclick="copyLink()">Copy link</button></div>
       </div>
-      ${top6.length?'<div class="chartbox tall" style="margin-top:14px"><canvas id="chartArtistTraj"></canvas></div><div class="hint">Trajectories of '+esc(name)+"'s songs in "+y+'.</div>':''}
-      <table style="margin-top:14px"><tbody>
+    </div>
+    <div class="tiles">
+      ${tile('Best peak', bestPeak<999?'#'+bestPeak:'—', '', bestPeak===1?'gold':'')}
+      ${tile('No.1 songs', no1s||'—', 'all seasons')}
+      ${tile('Songs charted', list.filter(t=>t.allWoc>0).length, `of ${list.length} with streams`)}
+      ${tile(`Streams ${y}`, fmt(yTotal), '')}
+      ${tile('All-time streams', fmt(allTotal), 'collabs count in full')}
+    </div>
+    ${top6.length?`<div class="panel"><h2>Chart runs · ${y}</h2><div class="chartbox tall"><canvas id="chartArtistTraj"></canvas></div>
+      <div class="chip-row">${top6.map((t,i)=>`<span class="chip" onclick="openTrack('${t.id}')"><span class="cs-dot" style="background:${RACE_COLORS[i%RACE_COLORS.length]}"></span>${esc(t.name)}</span>`).join('')}</div></div>`:''}
+    <div class="panel"><h2>Songs</h2>
+      <table><thead><tr><th></th><th>Song</th><th style="text-align:center">Run ${y}</th><th style="text-align:right">Peak</th><th style="text-align:right">WoC</th><th style="text-align:right">Streams ${y}</th><th style="text-align:right">All-time</th></tr></thead><tbody>
         ${list.map(t=>{const s=statsFor(t,y);return `<tr class="clickable" onclick="openTrack('${t.id}')">
           <td class="thumbcell">${thumbHTML(t)}</td>
-          <td><div class="t-name">${esc(t.name)}</div></td>
-          <td class="num">${s.peak?'Peak #'+s.peak:'—'}</td>
-          <td class="num">${s.woc} weeks</td>
-          <td class="num">${fmt(s.total)} streams</td>
+          <td><div class="t-name">${esc(t.name)}</div><div class="t-artist">${esc(t.artist)}</div></td>
+          <td class="sparkcell">${s.woc?rankSpark(t,y):''}</td>
+          <td class="num${t.allPeak===1?' no1c':''}">${t.allPeak?'#'+t.allPeak:'—'}</td>
+          <td class="num">${t.allWoc}</td>
+          <td class="num">${fmt(s.total)}</td>
+          <td class="num">${fmt(t.allTotal)}</td>
         </tr>`;}).join('')}
-      </tbody></table>
-    </div>`;
+      </tbody></table></div>`;
   if(top6.length){
     const mw=maxWeekOf(y);
     const labels=[]; for(let w=1;w<=mw;w++) labels.push('W'+w);
     drawChart('chartArtistTraj','line',{
       labels,
       datasets: top6.map((t,i)=>({ label:t.name,
-        data: labels.map((_,ix)=>{const e=entryAt(t,y,ix+1); return e&&e.rank!=null?e.rank:null;}),
-        borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length], borderWidth:2.5, tension:.35, pointRadius:0, pointHoverRadius:5, spanGaps:false }))
-    },{ plugins:{ legend:{position:'bottom', labels:{font:{family:'"Inter", system-ui, sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
-       scales:{ y:{ reverse:true, min:1, grid:{color:TH().grid}, ticks:{callback:v=>'#'+v} },
+        data: labels.map((_,ix)=>onChartRank(entryAt(t,y,ix+1))),
+        borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length], borderWidth:2.5, tension:0, pointRadius:0, pointHoverRadius:5, spanGaps:false }))
+    },{ interaction:{ mode:'nearest', intersect:false }, onHover:focusLineOnHover,
+       plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
+       scales:{ y:{ reverse:true, min:1, max:CHART_SIZE, grid:{color:TH().grid}, ticks:{callback:v=>'#'+v} },
                 x:{ grid:{display:false}, ticks:{maxTicksLimit:14} } } });
   }
   hydrateThumbs();
-  document.querySelector('#view-tracks').scrollIntoView({behavior:'smooth'});
-}
+  scrollDetailIntoView();
+};
 
 /* ───────── All-time ───────── */
 const AT_SIZE=100;       // Hall of Fame chốt ở top 100 all-time
@@ -1324,8 +1456,10 @@ function renderAtRegions(list){
   return n;
 }
 const AT_SORT_KEY={ pre:t=>t.baseline, on:t=>t.trackedTotal, all:t=>t.allTotal };
+// cột season 'y2026'… (chỉ hiện khi có >1 season) — sort được như 3 cột gốc
+const atKeyOf = k => AT_SORT_KEY[k] || (/^y\d{4}$/.test(k) ? (t=>statsFor(t,+k.slice(1)).total) : null);
 window.setAtSort=function(k){
-  if(!AT_SORT_KEY[k]) return;
+  if(!atKeyOf(k)) return;
   if(atSort===k) atSortDir = atSortDir==='desc' ? 'asc' : 'desc';
   else { atSort=k; atSortDir='desc'; }
   renderAllTime();
@@ -1362,15 +1496,15 @@ function renderAllTime(){
   const preRankOf=rankMap([...pool].sort((a,b)=>b.baseline-a.baseline), AT_SORT_KEY.pre);
   // Top 100 luôn lấy theo ĐÚNG cột đang sort (không cố định theo all-time) — sort "On-chart" phải lấy
   // đúng top 100 bài có on-chart stream cao nhất, không phải 100 bài all-time cao nhất rồi sắp lại.
-  const key=AT_SORT_KEY[atSort], sgn=atSortDir==='asc'?-1:1;
+  const yearCols = model.yearList.length>1 ? model.yearList.map(yr=>'y'+yr) : [];
+  if(!atKeyOf(atSort) || (atSort[0]==='y' && !yearCols.includes(atSort))) atSort='all';
+  const key=atKeyOf(atSort), sgn=atSortDir==='asc'?-1:1;
   const roster=[...pool].sort((a,b)=>key(b)-key(a) || b.allTotal-a.allTotal).slice(0, AT_SIZE);
   const sorted=[...roster].sort((a,b)=> sgn*(key(b)-key(a)) || b.allTotal-a.allTotal);
   const rankOf=rankMap(sorted, key);
-  for(const [k,id] of [['pre','atThPre'],['on','atThOn'],['all','atThAll']]){
-    const th=$(id); if(!th) continue;
-    th.classList.toggle('on', atSort===k);
-    const ar=th.querySelector('.sar'); if(ar) ar.textContent = atSort===k ? (atSortDir==='desc'?'▼':'▲') : '';
-  }
+  const th=(k,label)=>`<th class="sortable${atSort===k?' on':''}" style="text-align:right" onclick="setAtSort('${k}')">${label}<i class="sar">${atSort===k?(atSortDir==='desc'?'▼':'▲'):''}</i></th>`;
+  $('atThead').innerHTML=`<tr><th style="text-align:center">#</th><th style="text-align:center">+/-</th><th></th><th>Song</th>
+    ${th('pre','Pre-chart')}${yearCols.map(k=>th(k,k.slice(1))).join('')}${th('on','On-chart')}${th('all','All-time')}<th style="text-align:right">Peak</th></tr>`;
 
   const q=($('atSearch').value||'').trim().toLowerCase();
   const shown = q ? sorted.filter(t=>t.name.toLowerCase().includes(q)||t.artist.toLowerCase().includes(q)) : sorted;
@@ -1386,17 +1520,18 @@ function renderAllTime(){
       : delta>0 ? `<span class="mv up">+${delta}</span>`
       : delta<0 ? `<span class="mv down">-${-delta}</span>`
       : '<span class="mv eq">=</span>';
-    return `<tr>
+    return `<tr class="clickable" onclick="openTrack('${t.id}')">
       <td class="rank r${pos&&pos<=3?pos:''}" style="text-align:center">${pos ?? '<span style="font-size:15px;color:var(--faint)">—</span>'}</td>
       <td style="text-align:center">${mv}</td>
-      <td class="thumbcell clickable" onclick="openTrack('${t.id}')">${thumbHTML(t)}</td>
-      <td class="clickable" onclick="openTrack('${t.id}')"><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}${t.region?' · '+esc(t.region):''}</div></td>
+      <td class="thumbcell">${thumbHTML(t)}</td>
+      <td><div class="t-name">${esc(t.name)}${t.user?'<span class="badge-user">ADDED BY YOU</span>':''}</div><div class="t-artist">${esc(t.artist)}${t.genre?`<span class="gtag">${esc(t.genre)}</span>`:''}${t.region?' · '+esc(t.region):''}</div></td>
       <td class="num">${t.baseline?fmt(t.baseline):'—'}</td>
+      ${yearCols.map(k=>{ const v=atKeyOf(k)(t); return `<td class="num">${v?fmt(v):'—'}</td>`; }).join('')}
       <td class="num">${fmt(t.trackedTotal)}</td>
       <td class="num" style="color:var(--gold);font-weight:700">${fmt(t.allTotal)}</td>
       <td class="num">${t.allPeak?'#'+t.allPeak:'—'}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8"><div class="empty">${atRegion?'No songs tagged with region '+esc(AT_REGION_LABEL[atRegion]||atRegion)+'.':'No songs found.'}</div></td></tr>`;
+  }).join('') || `<tr><td colspan="${9+yearCols.length}"><div class="empty">${atRegion?'No songs tagged with region '+esc(AT_REGION_LABEL[atRegion]||atRegion)+'.':'No songs found.'}</div></td></tr>`;
   const pg=$('atPager');
   if(pg){
     const scope = atRegion ? ` · ${AT_REGION_LABEL[atRegion]} only (${pool.length} song${pool.length===1?'':'s'} with data)` : '';
@@ -1404,14 +1539,6 @@ function renderAllTime(){
                      : scope ? `<span>Top ${roster.length}${scope}</span>` : '';
   }
 
-  const topA=Object.entries(artists).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const ta=TH();
-  drawChart('chartAtArtists','bar',{
-    labels: topA.map(x=>x[0]),
-    datasets:[{ data: topA.map(x=>x[1]), backgroundColor: topA.map((_,i)=>i===0?ta.red:ta.mid), barPercentage:.8 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmt(c.parsed.x)+' streams'}}},
-     scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:ta.grid} }, y:{ grid:{display:false} } },
-     onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
   hydrateThumbs();
 }
 /* ───────── All-time · Phân bố stream ─────────
@@ -1790,11 +1917,12 @@ function fillYearSelect(){
   renderMasthead();
 }
 function switchView(v){
+  // rời Songs -> bỏ #song/… khỏi URL để reload không nhảy về bài cũ
+  if(v!=='tracks' && /^#(song|artist)\//.test(location.hash)){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} }
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
   document.querySelectorAll('.view').forEach(s=>s.classList.toggle('active', s.id==='view-'+v));
   if(v==='chart') renderChartView();
   if(v==='analytics') renderAnalytics();
-  if(v==='alltime') renderAllTime();
   if(v==='awards') renderAwards();
   if(v==='tracks') renderTrackList();
 }
@@ -1803,7 +1931,6 @@ function refreshAll(){
   const active=document.querySelector('nav button.active').dataset.view;
   if(active==='chart') renderChartView();
   if(active==='analytics') renderAnalytics();
-  if(active==='alltime') renderAllTime();
   if(active==='awards') renderAwards();
   if(active==='tracks') renderTrackList();
 }
@@ -1815,7 +1942,22 @@ $('wPrev').onclick=()=>{ if(selectedWeek>1){selectedWeek--; renderChartView();} 
 $('wNext').onclick=()=>{ if(selectedWeek<maxWeekOf(currentYear)+1){selectedWeek++; renderChartView();} };
 $('wSelect').onchange=e=>{ selectedWeek=+e.target.value; renderChartView(); };
 $('pngBtn').onclick=exportPNG;
-$('trackSearch').oninput=()=>renderTrackList();
+$('trackSearch').oninput=()=>{ sbState.limit=SB_PAGE; renderTrackList(); };
+$('sbFilter').addEventListener('click', e=>{ const b=e.target.closest('button[data-f]'); if(b){ sbState.f=b.dataset.f; sbState.limit=SB_PAGE; renderTrackList(); } });
+$('sbSort').onchange=e=>{ sbState.sort=e.target.value; sbState.limit=SB_PAGE; renderTrackList(); };
+// phím tắt: "/" để tìm bài; ↑/↓ trong danh sách để chuyển bài
+document.addEventListener('keydown', e=>{
+  const inField=/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName);
+  if(e.key==='/' && !inField){ e.preventDefault(); switchView('tracks'); $('trackSearch').focus(); return; }
+  if((e.key==='ArrowDown'||e.key==='ArrowUp') && document.querySelector('#view-tracks.active') && (!inField || document.activeElement.id==='trackSearch')){
+    const items=[...document.querySelectorAll('#trackList .sb-item')]; if(!items.length) return;
+    e.preventDefault();
+    let i=items.findIndex(el=>el.classList.contains('on'));
+    i = i<0 ? 0 : Math.max(0, Math.min(items.length-1, i+(e.key==='ArrowDown'?1:-1)));
+    openTrack(items[i].dataset.id);
+  }
+});
+window.addEventListener('popstate', ()=>{ if(model && !routeFromHash()) switchView('overview'); });
 $('top100Search').oninput=e=>{ top100State.q=e.target.value; renderTop100(); };
 $('cmpBtn').onclick=runCompare;
 $('anTabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-pane]'); if(b) setAnPane(b.dataset.pane); });
@@ -1834,6 +1976,7 @@ $('themeBtn').onclick=()=>setTheme(isDark()?'light':'dark');
     $('loading').style.display='none';
     document.getElementById('view-overview').classList.add('active');
     renderOverview();
+    routeFromHash(); // mở thẳng #song/… hoặc #artist/… nếu có
   }catch(e){
     const el=$('loading');
     if(el){ el.style.display='block'; el.textContent='Data load error: '+(e.message||e); }
