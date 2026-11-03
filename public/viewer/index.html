@@ -128,13 +128,32 @@
 
   <!-- ══ PHÂN TÍCH ══ -->
   <section class="view" id="view-analytics">
-    <div class="panel">
-      <h2>Records of the season <span id="recYear" style="color:var(--red)"></span></h2>
-      <div class="records" id="records"></div>
+    <div class="subtabs" id="anTabs" role="tablist">
+      <button type="button" data-pane="season" class="on">Season</button>
+      <button type="button" data-pane="race">No.1 Race</button>
+      <button type="button" data-pane="songs">Songs</button>
+      <button type="button" data-pane="artists">Artists</button>
     </div>
+
+    <!-- ── Season ── -->
+    <div class="anpane on" data-pane="season">
+      <div class="sec-head"><h2>Records of the season <span id="recYear" class="accent"></span></h2></div>
+      <div class="records" id="records"></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Top movers this week <span class="h-sub" id="moversSub"></span></h2>
+          <div class="chartbox"><canvas id="chartMovers"></canvas></div>
+          <div class="hint">Biggest rank climbs and falls versus last week. Click a bar to open the song.</div>
+        </div>
+        <div class="panel">
+          <h2>Peak distribution</h2>
+          <div id="peakBars" class="gstats"></div>
+          <div class="hint">Songs charted this season, grouped by the best rank they reached.</div>
+        </div>
+      </div>
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <h2 style="margin:0">Top 100 streams</h2>
+        <h2 style="margin:0">Top streams</h2>
         <div class="pill-row" id="top100Filter" style="margin:0">
           <button type="button" class="pill on" data-mode="season" onclick="setTop100Mode('season')">This season</button>
           <button type="button" class="pill" data-mode="all" onclick="setTop100Mode('all')">All time</button>
@@ -147,97 +166,139 @@
           <tbody id="top100Table"></tbody>
         </table>
       </div>
+      <div class="t100-more" id="top100More"></div>
       <div class="hint" id="top100Hint"></div>
     </div>
-    <div class="panel">
-      <div class="race-head">
-        <div>
-          <h2 style="margin:0">The no.1 race</h2>
-          <div class="hint" style="margin:6px 0 0">Weekly rank trajectories of the champions.</div>
-        </div>
-        <div class="race-controls">
-          <label for="raceSort">Sort by</label>
-          <select id="raceSort" onchange="raceSetSort(this.value)">
-            <option value="weeks">Weeks at #1</option>
-            <option value="peakStream">Peak streams</option>
-            <option value="peakWeek">Peak week</option>
-            <option value="first">First #1</option>
-          </select>
-        </div>
-      </div>
-      <div class="race-grid">
-        <div class="race-chart">
-          <div class="chartbox tall"><canvas id="chartBump"></canvas></div>
-          <div class="race-slider">
-            <label for="raceWeek">Weekly view</label>
-            <input type="range" id="raceWeek" min="1" max="52" oninput="raceSetWeek(this.value)">
-            <span id="raceWeekLabel" class="mono"></span>
+      <div class="panel">
+        <div class="race-head">
+          <div>
+            <h2 style="margin:0">Share of streams over time</h2>
+            <div class="hint" style="margin:6px 0 0">Weekly share of chart streams — a collaboration counts toward each of its regions / genres.</div>
+          </div>
+          <div class="pill-row" id="shareMode" style="margin:0">
+            <button type="button" class="pill on" data-mode="region" onclick="setShareMode('region')">Region</button>
+            <button type="button" class="pill" data-mode="genre" onclick="setShareMode('genre')">Genre</button>
           </div>
         </div>
-        <div class="race-stats">
-          <h3>Champion stats</h3>
-          <div id="champStats"></div>
-        </div>
-      </div>
-      <div class="race-carousel">
-        <div class="hint" style="margin:16px 0 0"><b>Champions' carousel</b> — toggle which songs appear on the chart.</div>
-        <div id="champCarousel" class="chip-row"></div>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="race-head">
-        <div>
-          <h2 style="margin:0">📈 Ranking Since On-Chart</h2>
-          <div class="hint" style="margin:2px 0 0">Each song's rank counted from its own debut week — compare climbs and staying power regardless of when a song actually charted.</div>
-        </div>
-        <div class="race-controls">
-          <input type="text" list="trackOptions" id="debutAdd" placeholder="Add a song…" style="min-width:200px">
-          <button class="btn small" id="debutAddBtn">Add</button>
-        </div>
-      </div>
-      <div class="chartbox tall"><canvas id="chartDebut"></canvas></div>
-      <div class="race-carousel">
-        <div class="hint" style="margin:14px 0 0"><b>Songs compared</b> — click a chip to remove it.</div>
-        <div id="debutChips" class="chip-row"></div>
-      </div>
-    </div>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Top artists this season</h2>
-        <div class="chartbox tall"><canvas id="chartArtists"></canvas></div>
-        <div class="hint">Click a bar to open the artist page.</div>
+        <div class="chartbox"><canvas id="chartShare"></canvas></div>
+        <div class="hint" id="shareHint"></div>
       </div>
       <div class="panel">
-        <h2>Longest charting · WOC</h2>
-        <div class="chartbox tall"><canvas id="chartWoc"></canvas></div>
-      </div>
-    </div>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Peak distribution</h2>
-        <div class="chartbox"><canvas id="chartPeaks"></canvas></div>
-      </div>
-      <div class="panel">
-        <h2>Consistency vs explosiveness</h2>
-        <div class="chartbox"><canvas id="chartScatter"></canvas></div>
-        <div class="hint">X-axis: weeks on chart · Y-axis: average streams per week.</div>
-      </div>
-    </div>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Next week · forecast</h2>
+        <h2>Next week · forecast <span class="h-sub" id="predSub"></span></h2>
         <div id="predBody"></div>
         <div class="hint">Extrapolated from the stream momentum of the last 3 weeks — for reference only.</div>
       </div>
+    </div>
+
+    <!-- ── No.1 Race ── -->
+    <div class="anpane" data-pane="race">
       <div class="panel">
-        <h2>Head to head</h2>
-        <div class="controls" style="margin-bottom:10px">
-          <input type="text" list="trackOptions" id="cmpA" placeholder="First title" style="flex:1;min-width:150px">
-          <span class="vs">VS</span>
-          <input type="text" list="trackOptions" id="cmpB" placeholder="Second title" style="flex:1;min-width:150px">
-          <button class="btn small" id="cmpBtn">Compare</button>
+        <div class="race-head">
+          <div>
+            <h2 style="margin:0">The No.1 race</h2>
+            <div class="hint" style="margin:6px 0 0">Weekly rank trajectories of the champions. Hover a line to focus it; gaps mean the song was off the chart.</div>
+          </div>
+          <div class="race-controls">
+            <label for="raceSort">Sort by</label>
+            <select id="raceSort" onchange="raceSetSort(this.value)">
+              <option value="weeks">Weeks at #1</option>
+              <option value="peakStream">Peak streams</option>
+              <option value="peakWeek">Peak week</option>
+              <option value="first">First #1</option>
+            </select>
+          </div>
         </div>
-        <div id="cmpOut"><div class="empty" style="padding:20px 0">Pick two titles to compare peak, weeks on chart, streams and rank trajectory.</div></div>
+        <div class="race-grid">
+          <div class="race-chart">
+            <div class="chartbox tall"><canvas id="chartBump"></canvas></div>
+            <div class="race-slider">
+              <label for="raceWeek">Weekly view</label>
+              <input type="range" id="raceWeek" min="1" max="52" oninput="raceSetWeek(this.value)">
+              <span id="raceWeekLabel" class="mono"></span>
+            </div>
+          </div>
+          <div class="race-stats">
+            <h3>Champion stats</h3>
+            <div id="champStats"></div>
+          </div>
+        </div>
+        <div class="race-carousel">
+          <div class="hint" style="margin:16px 0 0"><b>Champions</b> — toggle which songs appear on the chart.</div>
+          <div id="champCarousel" class="chip-row"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Songs ── -->
+    <div class="anpane" data-pane="songs">
+      <div class="panel">
+        <div class="race-head">
+          <div>
+            <h2 style="margin:0">Chart runs</h2>
+            <div class="hint" style="margin:6px 0 0">Every week of the season, one square per week — the darker the square, the higher the rank. Empty = off the chart.</div>
+          </div>
+          <div class="race-controls">
+            <label for="runSort">Sort by</label>
+            <select id="runSort" onchange="setRunSort(this.value)">
+              <option value="woc">Weeks on chart</option>
+              <option value="total">Season streams</option>
+              <option value="peak">Best peak</option>
+            </select>
+          </div>
+        </div>
+        <div id="runGrid" class="runs"></div>
+        <div class="runs-foot">
+          <div class="runs-legend">
+            <span><i class="rq q1"></i>#1</span><span><i class="rq q2"></i>2–5</span><span><i class="rq q3"></i>6–10</span>
+            <span><i class="rq q4"></i>11–20</span><span><i class="rq q5"></i>21–50</span><span><i class="rq"></i>Off chart</span>
+          </div>
+          <button type="button" class="btn ghost small" id="runMore" onclick="toggleRunMore()"></button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="race-head">
+          <div>
+            <h2 style="margin:0">Ranking since debut</h2>
+            <div class="hint" style="margin:6px 0 0">Each song's rank counted from its own debut week — compare climbs and staying power regardless of when a song actually charted.</div>
+          </div>
+          <div class="race-controls">
+            <input type="text" list="trackOptions" id="debutAdd" placeholder="Add a song…" style="min-width:200px">
+            <button class="btn small" id="debutAddBtn">Add</button>
+          </div>
+        </div>
+        <div class="chartbox tall"><canvas id="chartDebut"></canvas></div>
+        <div id="debutChips" class="chip-row"></div>
+      </div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Consistency vs explosiveness</h2>
+          <div class="chartbox tall"><canvas id="chartScatter"></canvas></div>
+          <div class="scatter-legend">
+            <span><i style="background:var(--red)"></i>Peaked #1</span>
+            <span><i style="background:#10B981"></i>Peaked top 10</span>
+            <span><i style="background:var(--faint)"></i>Other</span>
+          </div>
+          <div class="hint">X: weeks on chart · Y: average streams per charted week. Dashed lines are the medians.</div>
+        </div>
+        <div class="panel">
+          <h2>Head to head</h2>
+          <div class="controls" style="margin-bottom:10px">
+            <input type="text" list="trackOptions" id="cmpA" placeholder="First title" style="flex:1;min-width:140px">
+            <span class="vs">VS</span>
+            <input type="text" list="trackOptions" id="cmpB" placeholder="Second title" style="flex:1;min-width:140px">
+            <button class="btn small" id="cmpBtn">Compare</button>
+          </div>
+          <div id="cmpOut"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Artists ── -->
+    <div class="anpane" data-pane="artists">
+      <div class="panel">
+        <h2>Top artists this season</h2>
+        <div id="artistBoard"></div>
+        <div class="hint">Collaborations credit full streams to each artist. Click an artist to open their page.</div>
       </div>
     </div>
   </section>

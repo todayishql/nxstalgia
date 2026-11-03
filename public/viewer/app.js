@@ -527,89 +527,266 @@ const raceLabelPlugin={ id:'raceLabels', afterDatasetsDraw(chart){
     const meta=chart.getDatasetMeta(i); let pt=null;
     for(let k=meta.data.length-1;k>=0;k--){ if(ds.data[k]!=null){ pt=meta.data[k]; break; } }
     if(!pt) return;
-    ctx.fillStyle=ds.borderColor; ctx.fillText(ds.label, pt.x+7, pt.y);
+    ctx.fillStyle=ds.borderColor; ctx.fillText(ds.label.length>16?ds.label.slice(0,15)+'…':ds.label, pt.x+7, pt.y);
   });
   ctx.restore();
 } };
+/* Hạng > CHART_SIZE trong dữ liệu là "ngoài chart" (#51/#52 là ô giữ chỗ) — các biểu đồ quỹ đạo coi là khoảng trống */
+const CHART_SIZE=50;
+const onChartRank = e => (e && e.rank!=null && e.rank<=CHART_SIZE) ? e.rank : null;
+// Làm mờ 1 màu hex (#RRGGBB) cho line nền khi đang focus line khác
+const fadeHex = (c,a='33') => /^#[0-9a-f]{6}$/i.test(c) ? c+a : c;
+// Hover 1 line -> line đó dày + rõ, các line khác mờ đi (dùng chung cho race / debut / compare)
+function focusLineOnHover(ev, els, chart){
+  const i = els.length ? els[0].datasetIndex : null;
+  if(chart._hl===i) return;
+  chart._hl=i;
+  chart.data.datasets.forEach((d,k)=>{
+    if(d._c==null){ d._c=d.borderColor; d._w=d.borderWidth; }
+    const bg = d._bg===true;
+    d.borderColor = (i==null || k===i || bg) ? d._c : fadeHex(d._c);
+    d.borderWidth = (i!=null && k===i && !bg) ? d._w+1.5 : d._w;
+  });
+  chart.update('none');
+}
+let anPane='season';
+function setAnPane(p){
+  anPane=p;
+  document.querySelectorAll('#anTabs button').forEach(b=>b.classList.toggle('on', b.dataset.pane===p));
+  document.querySelectorAll('.anpane').forEach(el=>el.classList.toggle('on', el.dataset.pane===p));
+  renderAnalytics();
+}
 function renderAnalytics(){
   const y=currentYear;
   $('recYear').textContent=y;
   const charted=[...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
-  renderTop100(); // "Top 100 streams" — độc lập với năm có dữ liệu hay không (chế độ All time có thể vẫn có)
   if(!charted.length){
     $('records').innerHTML='<div class="empty">No data yet for this year.</div>';
-    ['chartBump','chartArtists','chartWoc','chartPeaks','chartScatter','chartDebut'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
-    if($('champStats')) $('champStats').innerHTML='<div class="empty">No #1 songs yet.</div>';
-    if($('champCarousel')) $('champCarousel').innerHTML='';
-    if($('debutChips')) $('debutChips').innerHTML='';
+    ['chartBump','chartMovers','chartShare','chartScatter','chartDebut'].forEach(id=>{ if(charts[id]){charts[id].destroy(); delete charts[id];} });
+    ['champStats','champCarousel','debutChips','peakBars','runGrid','artistBoard'].forEach(id=>{ if($(id)) $(id).innerHTML=''; });
     $('predBody').innerHTML='<div class="empty" style="padding:16px 0">No data yet.</div>';
+    if(anPane==='season') renderTop100();
     return;
   }
-  const S=t=>statsFor(t,y);
+  // chỉ vẽ tab con đang mở — chart trong khung ẩn sẽ có kích thước 0
+  if(anPane==='season') renderAnSeason(y, charted);
+  else if(anPane==='race') renderRace(y);
+  else if(anPane==='songs'){ renderRuns(y, charted); renderDebutRace(); renderScatter(y, charted); renderCompareEmpty(); }
+  else if(anPane==='artists') renderArtistBoard(y, charted);
+}
 
+/* ── Season: records + movers + peak + top streams + share + forecast ── */
+function renderAnSeason(y, charted){
+  const S=t=>statsFor(t,y);
   const byStreak=[...charted].sort((a,b)=>S(b).streak-S(a).streak)[0];
   const byBest=[...charted].sort((a,b)=>S(b).best-S(a).best)[0];
   const byWoc=[...charted].sort((a,b)=>S(b).woc-S(a).woc)[0];
   const no1s={}; for(const t of charted) if(S(t).peak===1) for(const a of t.artists) no1s[a]=(no1s[a]||0)+1;
   const topNo1=Object.entries(no1s).sort((a,b)=>b[1]-a[1])[0];
-  let nDebut1=0;
+  const debut1=[];
   for(const t of charted){
-    const wm=t.years.get(y);
-    const first=[...wm.entries()].filter(([w,e])=>e.rank!=null).sort((a,b)=>a[0]-b[0])[0];
-    if(first&&first[1].rank===1) nDebut1++;
+    const first=[...t.years.get(y).entries()].filter(([,e])=>e.rank!=null).sort((a,b)=>a[0]-b[0])[0];
+    if(first&&first[1].rank===1) debut1.push(t);
   }
-  $('records').innerHTML = `
-    <div class="record"><div class="rl">Longest #1 streak</div><div class="rv">${esc(byStreak.name)} — ${esc(byStreak.artist)}</div><div class="rd">${S(byStreak).streak} weeks in a row</div></div>
-    <div class="record"><div class="rl">Highest weekly streams</div><div class="rv">${esc(byBest.name)} — ${esc(byBest.artist)}</div><div class="rd">${fmt(S(byBest).best)} streams</div></div>
-    <div class="record"><div class="rl">Longest-charting</div><div class="rv">${esc(byWoc.name)} — ${esc(byWoc.artist)}</div><div class="rd">${S(byWoc).woc} weeks on chart</div></div>
-    <div class="record"><div class="rl">Most No.1 songs</div><div class="rv">${topNo1?esc(topNo1[0]):'—'}</div><div class="rd">${topNo1?topNo1[1]+' songs reached #1':''}</div></div>
-    <div class="record"><div class="rl">Debut straight at No.1</div><div class="rv">${nDebut1} songs</div><div class="rd">debuted at #1</div></div>`;
+  const rec=(lbl,val,unit,t,sub,click)=>`<div class="record${click?' clickable':''}"${click?` onclick="${click}"`:''}>
+    <div class="rl">${lbl}</div>
+    <div class="rbig">${val}<span class="ru">${unit}</span></div>
+    <div class="rwho">${t?thumbHTML(t):'<span class="thumb">★</span>'}<div class="rwho-t"><div class="rv">${esc(sub[0])}</div><div class="rsub">${esc(sub[1]||'')}</div></div></div>
+  </div>`;
+  $('records').innerHTML =
+    rec('Longest #1 streak', S(byStreak).streak, 'wks', byStreak, [byStreak.name, byStreak.artist], `openTrack('${byStreak.id}')`)+
+    rec('Highest weekly streams', fmt(S(byBest).best), '', byBest, [byBest.name, byBest.artist], `openTrack('${byBest.id}')`)+
+    rec('Longest-charting', S(byWoc).woc, 'wks', byWoc, [byWoc.name, byWoc.artist], `openTrack('${byWoc.id}')`)+
+    rec('Most No.1 songs', topNo1?topNo1[1]:0, 'songs', null, [topNo1?topNo1[0]:'—', 'reached #1'], topNo1?`openArtist('${jsStr(topNo1[0])}')`:'')+
+    rec('Debuted at No.1', debut1.length, debut1.length===1?'song':'songs', debut1[0]||null,
+        debut1.length?[debut1[0].name, debut1.length>1?'+ '+(debut1.length-1)+' more':debut1[0].artist]:['None yet',''], debut1[0]?`openTrack('${debut1[0].id}')`:'');
 
-  renderRace(y); // "The #1 Race" — module Champions (bảng + carousel + slider)
-  renderDebutRace(); // "Ranking Since On-Chart" — trajectory tính từ tuần đầu tiên on-chart (liên tục, xuyên năm)
-
-  const TC=TH();
-  const byArtist={}; for(const t of charted) for(const a of t.artists) byArtist[a]=(byArtist[a]||0)+S(t).total;
-  const topA=Object.entries(byArtist).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  drawChart('chartArtists','bar',{
-    labels: topA.map(x=>x[0]),
-    datasets:[{ data: topA.map(x=>x[1]), backgroundColor: topA.map((_,i)=>i===0?TC.red:TC.mid), barPercentage:.8 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>fmt(c.parsed.x)+' streams'}}},
-     scales:{ x:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid} }, y:{ grid:{display:false} } },
-     onClick:(ev,els)=>{ if(els.length) openArtist(topA[els[0].index][0]); } });
-
-  const topW=[...charted].sort((a,b)=>S(b).woc-S(a).woc).slice(0,10);
-  drawChart('chartWoc','bar',{
-    labels: topW.map(t=>t.name),
-    datasets:[{ data: topW.map(t=>S(t).woc), backgroundColor:TC.red, barPercentage:.8 }]
-  },{ indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.x+' weeks · '+topW[c.dataIndex].artist}}},
-     scales:{ x:{ beginAtZero:true, ticks:{precision:0}, grid:{color:TC.grid} }, y:{ grid:{display:false} } } });
-
-  const buckets={'#1':0,'Top 3':0,'Top 10':0,'Top 20':0,'Top 51':0,'Outside Top 51':0};
-  for(const t of charted){
-    const p=S(t).peak;
-    if(p===1) buckets['#1']++; else if(p<=3) buckets['Top 3']++;
-    else if(p<=10) buckets['Top 10']++; else if(p<=20) buckets['Top 20']++;
-    else if(p<=51) buckets['Top 51']++; else buckets['Outside Top 51']++;
-  }
-  drawChart('chartPeaks','doughnut',{
-    labels:Object.keys(buckets),
-    datasets:[{ data:Object.values(buckets),
-      backgroundColor:[TC.red, PALETTE[1], PALETTE[2], PALETTE[4], PALETTE[5], TC.grid], borderWidth:0, spacing:2 }]
-  },{ cutout:'62%', plugins:{ legend:{ position:'right' },
-       tooltip:{ callbacks:{ label:c=>c.label+' · '+c.parsed+' song'+(c.parsed===1?'':'s') } } } });
-
-  const pts=charted.filter(t=>S(t).woc>=2).map(t=>({x:S(t).woc, y:Math.round(S(t).total/S(t).woc), t, one:S(t).peak===1}));
-  drawChart('chartScatter','scatter',{
-    datasets:[{ data:pts, backgroundColor:pts.map(p=>p.one?TC.red:TC.mid), pointRadius:5, pointHoverRadius:7 }]
-  },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>{const p=c.raw; return [p.t.name+' — '+p.t.artist, p.x+' wks · '+fmt(p.y)+'/wk'];} } } },
-     scales:{ x:{ ticks:{precision:0}, grid:{color:TC.grid},
-                  title:{display:true, text:'WEEKS ON CHART', color:TC.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} },
-              y:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:TC.grid},
-                  title:{display:true, text:'AVG STREAMS / WEEK', color:TC.mid, font:{family:'"Inter", system-ui, sans-serif', size:9}} } },
-     onClick:(ev,els)=>{ if(els.length) openTrack(pts[els[0].index].t.id); } });
-
+  renderMovers(y);
+  renderPeakBars(y, charted);
+  renderTop100();
+  renderShare(y);
   renderPrediction(y);
+  hydrateThumbs();
+}
+
+function renderMovers(y){
+  const w=maxWeekOf(y);
+  $('moversSub').textContent = w ? 'W'+(w-1)+' → W'+w : '';
+  const moves=[];
+  if(w) for(const r of weekChart(y,w)){
+    const p=entryAtGw(r.t, gwOf(y,w)-1);
+    const pr=onChartRank(p), cr=onChartRank({rank:r.rank});
+    if(pr!=null && cr!=null && pr!==cr) moves.push({ t:r.t, d:pr-cr, from:pr, to:cr });
+  }
+  const up=moves.filter(m=>m.d>0).sort((a,b)=>b.d-a.d).slice(0,6);
+  const down=moves.filter(m=>m.d<0).sort((a,b)=>a.d-b.d).slice(0,6).reverse();
+  const list=[...up, ...down];
+  const tc=TH(), upC=cssv('--up')||'#15803D', dnC=cssv('--down')||'#BE123C';
+  drawChart('chartMovers','bar',{
+    labels:list.map(m=>m.t.name.length>26?m.t.name.slice(0,25)+'…':m.t.name),
+    datasets:[{ data:list.map(m=>m.d), backgroundColor:list.map(m=>m.d>0?upC:dnC), borderRadius:4, barPercentage:.75 }]
+  },{ indexAxis:'y',
+     plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:i=>list[i[0].dataIndex].t.name+' — '+list[i[0].dataIndex].t.artist,
+       label:c=>{ const m=list[c.dataIndex]; return '#'+m.from+' → #'+m.to+' ('+(m.d>0?'+':'')+m.d+')'; } } } },
+     scales:{ x:{ grid:{color:tc.grid}, ticks:{ precision:0, callback:v=>(v>0?'+':'')+v } }, y:{ grid:{display:false} } },
+     onClick:(ev,els)=>{ if(els.length) openTrack(list[els[0].index].t.id); } });
+}
+
+function renderPeakBars(y, charted){
+  const B=[['#1',p=>p===1],['#2–3',p=>p<=3],['#4–10',p=>p<=10],['#11–20',p=>p<=20],['#21–50',p=>p<=CHART_SIZE],['Outside top 50',()=>true]];
+  const cnt=B.map(()=>0);
+  for(const t of charted){ const p=statsFor(t,y).peak; const i=B.findIndex(([,f])=>f(p)); cnt[i]++; }
+  const max=Math.max(1,...cnt), tot=charted.length;
+  $('peakBars').innerHTML=B.map(([lbl],i)=>`<div class="gstat"><span class="gname">${lbl}</span>
+    <span class="gbar"><i style="width:${(cnt[i]/max*100).toFixed(1)}%;${i>=4?'background:var(--faint)':''}"></i></span>
+    <span class="gval"><b>${cnt[i]}</b> · ${tot?Math.round(cnt[i]/tot*100):0}%</span></div>`).join('');
+}
+
+/* ── Share of streams theo region / genre ── */
+let shareMode='region';
+window.setShareMode=function(m){ shareMode=m; renderShare(currentYear); };
+function renderShare(y){
+  document.querySelectorAll('#shareMode .pill').forEach(b=>b.classList.toggle('on', b.dataset.mode===shareMode));
+  const mw=maxWeekOf(y);
+  const groupsOf = shareMode==='region'
+    ? t=>[...trackRegions(t)].map(r=>AT_REGION_LABEL[r]||r)
+    : t=>[t.genre||'Untagged'];
+  const perWeek=[]; const tot=new Map();
+  for(let w=1; w<=mw; w++){
+    const m=new Map();
+    for(const r of weekChart(y,w)){ if(r.rank>CHART_SIZE) continue; for(const g of groupsOf(r.t)){ m.set(g,(m.get(g)||0)+r.stream); tot.set(g,(tot.get(g)||0)+r.stream); } }
+    perWeek.push(m);
+  }
+  // giữ 5 nhóm lớn nhất, còn lại gộp "Other"
+  let keys=[...tot.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+  const top=keys.slice(0,5), rest=new Set(keys.slice(5));
+  if(rest.size) top.push('Other');
+  const labels=[]; for(let w=1;w<=mw;w++) labels.push('W'+w);
+  const ds=top.map((g,i)=>{
+    const col = g==='Untagged' ? (cssv('--faint')||'#7A8496') : PALETTE[i%PALETTE.length];
+    return { label:g, fill:true, tension:.3, pointRadius:0, borderWidth:1.5, borderColor:col, backgroundColor:fadeHex(col,'B3'),
+      data:perWeek.map(m=>{ const s=[...m.values()].reduce((a,b)=>a+b,0); if(!s) return null;
+        const v = g==='Other' ? [...m.entries()].filter(([k])=>rest.has(k)).reduce((a,[,v])=>a+v,0) : (m.get(g)||0);
+        return +(v/s*100).toFixed(1); }) };
+  });
+  // chưa gắn tag nào -> 1 khối xám vô nghĩa: ẩn chart, chỉ hiện gợi ý
+  const onlyUntagged = top.length<=1 && (top[0]||'Untagged')==='Untagged';
+  $('chartShare').parentElement.style.display = onlyUntagged ? 'none' : '';
+  if(onlyUntagged){ if(charts.chartShare){ charts.chartShare.destroy(); delete charts.chartShare; } }
+  else {
+    const tc=TH();
+    drawChart('chartShare','line',{ labels, datasets:ds },
+      { interaction:{ mode:'index', intersect:false },
+        plugins:{ legend:{ position:'bottom' }, tooltip:{ displayColors:true, callbacks:{ label:c=>c.dataset.label+' · '+c.parsed.y+'%' } } },
+        scales:{ y:{ stacked:true, min:0, max:100, grid:{color:tc.grid}, ticks:{ callback:v=>v+'%' } },
+                 x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } });
+  }
+  $('shareHint').textContent = onlyUntagged
+    ? (shareMode==='region' ? 'No artist has a region yet — tag artists in /admin/artists to see the split.' : 'No song has a genre yet — set genres in /admin to see the split.')
+    : 'Top 5 '+(shareMode==='region'?'regions':'genres')+(rest.size?' + Other':'')+'. Shares are normalised so each week sums to 100%.';
+}
+
+/* ── Songs: chart run heatmap ── */
+let runState={ sort:'woc', more:false };
+window.setRunSort=function(v){ runState.sort=v; renderRuns(currentYear); };
+window.toggleRunMore=function(){ runState.more=!runState.more; renderRuns(currentYear); };
+function renderRuns(y, charted){
+  charted = charted || [...model.tracks.values()].filter(t=>statsFor(t,y).woc>0);
+  const S=t=>statsFor(t,y), mw=maxWeekOf(y);
+  const live=t=>{ let n=0; for(const e of (t.years.get(y)||new Map()).values()) if(onChartRank(e)!=null) n++; return n; };
+  const list=charted.map(t=>({ t, woc:live(t), total:S(t).total, peak:S(t).peak })).filter(r=>r.woc>0);
+  if(runState.sort==='total') list.sort((a,b)=>b.total-a.total);
+  else if(runState.sort==='peak') list.sort((a,b)=>a.peak-b.peak || b.woc-a.woc);
+  else list.sort((a,b)=>b.woc-a.woc || a.peak-b.peak);
+  const n=runState.more?50:20, rows=list.slice(0,n);
+  const q=r=> r===1?'q1':r<=5?'q2':r<=10?'q3':r<=20?'q4':'q5';
+  const head=`<div class="run-row run-head"><div class="run-name"></div><div class="run-cells">${
+    Array.from({length:mw},(_,i)=>`<span>${(i+1)%5===0||i===0?i+1:''}</span>`).join('')}</div><div class="run-stat">WoC</div><div class="run-stat">Peak</div></div>`;
+  $('runGrid').style.setProperty('--n', mw);
+  $('runGrid').innerHTML = head + rows.map((r,i)=>{
+    const wm=r.t.years.get(y)||new Map();
+    const cells=Array.from({length:mw},(_,k)=>{ const rk=onChartRank(wm.get(k+1)); return rk==null?'<i></i>':`<i class="${q(rk)}" title="W${k+1} · #${rk}"></i>`; }).join('');
+    return `<div class="run-row clickable" onclick="openTrack('${r.t.id}')">
+      <div class="run-name"><span class="run-i">${i+1}</span>${thumbHTML(r.t)}<div><div class="t-name">${esc(r.t.name)}</div><div class="t-artist">${esc(r.t.artist)}</div></div></div>
+      <div class="run-cells">${cells}</div>
+      <div class="run-stat"><b>${r.woc}</b></div><div class="run-stat${r.peak===1?' no1':''}"><b>#${r.peak}</b></div>
+    </div>`;
+  }).join('');
+  const btn=$('runMore');
+  btn.style.display = list.length>20 ? '' : 'none';
+  btn.textContent = runState.more ? 'Show top 20' : 'Show top 50';
+  hydrateThumbs();
+}
+
+/* ── Songs: scatter consistency vs explosiveness ── */
+// jitter cố định theo id để các chấm cùng số tuần không đè lên nhau
+const jitterOf = id => { let h=0; for(const c of String(id)) h=(h*31+c.charCodeAt(0))|0; return ((Math.abs(h)%1000)/1000-.5)*.6; };
+function renderScatter(y, charted){
+  const S=t=>statsFor(t,y);
+  const pts=charted.filter(t=>S(t).woc>=2).map(t=>({ x:S(t).woc+jitterOf(t.id), y:Math.round(S(t).total/S(t).woc), t, woc:S(t).woc, peak:S(t).peak }));
+  if(!pts.length){ if(charts.chartScatter){ charts.chartScatter.destroy(); delete charts.chartScatter; } return; }
+  const med=a=>{ const s=[...a].sort((p,q)=>p-q); const m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const mx=med(pts.map(p=>p.woc)), my=med(pts.map(p=>p.y));
+  const tc=TH(), red=tc.red, grn='#10B981', gry=cssv('--faint')||'#7A8496';
+  const col=p=>p.peak===1?red:(p.peak<=10?grn:gry);
+  const labelled=new Set([...pts].sort((a,b)=>b.y-a.y).slice(0,4).concat([...pts].sort((a,b)=>b.woc-a.woc).slice(0,2)));
+  const quad={ id:'quad', beforeDatasetsDraw(ch){
+    const {ctx, chartArea:a, scales:{x,y:yy}}=ch; const px=x.getPixelForValue(mx), py=yy.getPixelForValue(my);
+    ctx.save(); ctx.strokeStyle=tc.grid; ctx.setLineDash([4,4]); ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.moveTo(px,a.top); ctx.lineTo(px,a.bottom); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle=tc.faint; ctx.font='600 10px "Inter", system-ui, sans-serif';
+    ctx.textAlign='left';  ctx.fillText('FLASH HITS', a.left+6, a.top+12); ctx.fillText('DEEP CUTS', a.left+6, a.bottom-6);
+    ctx.textAlign='right'; ctx.fillText('STAPLES', a.right-6, a.top+12); ctx.fillText('SLOW BURNERS', a.right-6, a.bottom-6);
+    ctx.restore(); },
+    afterDatasetsDraw(ch){
+      const {ctx}=ch, meta=ch.getDatasetMeta(0); ctx.save(); ctx.font='600 10.5px "Inter", system-ui, sans-serif'; ctx.fillStyle=tc.ink; ctx.textBaseline='middle';
+      pts.forEach((p,i)=>{ if(!labelled.has(p)) return; const el=meta.data[i]; const nm=p.t.name.length>18?p.t.name.slice(0,17)+'…':p.t.name;
+        const right=el.x>ch.chartArea.right-110; ctx.textAlign=right?'right':'left'; ctx.fillText(nm, el.x+(right?-8:8), el.y); });
+      ctx.restore(); } };
+  drawChart('chartScatter','scatter',{
+    datasets:[{ data:pts, backgroundColor:pts.map(p=>fadeHex(col(p),'B3')), borderColor:pts.map(col), borderWidth:1, pointRadius:4.5, pointHoverRadius:7 }]
+  },{ plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>{const p=c.raw; return [p.t.name+' — '+p.t.artist, p.woc+' wks · '+fmt(p.y)+'/wk · peak #'+p.peak];} } } },
+     scales:{ x:{ ticks:{precision:0}, grid:{color:tc.grid}, title:{display:true, text:'Weeks on chart', color:tc.mid} },
+              y:{ beginAtZero:true, ticks:{callback:v=>abbr(v)}, grid:{color:tc.grid}, title:{display:true, text:'Avg streams / week', color:tc.mid} } },
+     onClick:(ev,els)=>{ if(els.length) openTrack(pts[els[0].index].t.id); } }, [quad]);
+}
+
+/* ── Songs: head to head — trạng thái trống gọn + cặp gợi ý ── */
+function renderCompareEmpty(){
+  const el=$('cmpOut'); if(!el || el.dataset.filled) return;
+  const y=currentYear, w=maxWeekOf(y), rows=w?weekChart(y,w):[];
+  const pairs=[];
+  if(rows[1]) pairs.push([rows[0].t, rows[1].t, '#1 vs #2']);
+  if(rows[2]) pairs.push([rows[1].t, rows[2].t, '#2 vs #3']);
+  el.innerHTML=`<div class="cmp-empty"><div>Pick two titles to compare peak, weeks on chart, streams and rank trajectory.</div>
+    ${pairs.length?`<div class="chip-row" style="justify-content:center">${pairs.map(([a,b,l])=>`<button type="button" class="chip" onclick="comparePair('${a.id}','${b.id}')"><span class="ck">${l}</span><span>${esc(a.name)} vs ${esc(b.name)}</span></button>`).join('')}</div>`:''}</div>`;
+}
+window.comparePair=function(a,b){
+  const A=model.tracks.get(a), B=model.tracks.get(b); if(!A||!B) return;
+  $('cmpA').value=A.name+' — '+A.artist; $('cmpB').value=B.name+' — '+B.artist; runCompare();
+};
+
+/* ── Artists: bảng xếp hạng nghệ sĩ mùa giải ── */
+function renderArtistBoard(y, charted){
+  const S=t=>statsFor(t,y), m=new Map();
+  for(const t of charted) for(const a of t.artists){
+    const k=artistKey(a); let r=m.get(k); if(!r){ r={ name:a, streams:0, songs:0, no1:0, peak:null, top:null }; m.set(k,r); }
+    const s=S(t); r.streams+=s.total; r.songs++; if(s.peak===1) r.no1++; if(r.peak==null||s.peak<r.peak) r.peak=s.peak;
+    if(!r.top||s.total>S(r.top).total) r.top=t;
+  }
+  const list=[...m.values()].sort((a,b)=>b.streams-a.streams).slice(0,15);
+  const grand=charted.reduce((a,t)=>a+S(t).total,0), max=list[0]?.streams||1;
+  $('artistBoard').innerHTML=`<table class="aboard"><thead><tr><th style="width:40px;text-align:center">#</th><th>Artist</th><th class="ab-bar-h">Season streams</th>
+    <th style="text-align:right">Share</th><th style="text-align:right">Songs</th><th style="text-align:right">No.1s</th><th style="text-align:right">Best peak</th></tr></thead><tbody>${
+    list.map((r,i)=>`<tr class="clickable" onclick="openArtist('${jsStr(r.name)}')">
+      <td class="rank${i===0?' r1':''}">${i+1}</td>
+      <td><div class="champ-song">${thumbHTML(r.top)}<div><div class="t-name">${esc(r.name)}</div><div class="t-artist">Top song: ${esc(r.top.name)}</div></div></div></td>
+      <td class="ab-bar"><div class="ab-in"><span class="gbar"><i style="width:${(r.streams/max*100).toFixed(1)}%"></i></span><span class="num">${fmt(r.streams)}</span></div></td>
+      <td class="num">${grand?(r.streams/grand*100).toFixed(1):0}%</td>
+      <td class="num">${r.songs}</td>
+      <td class="num">${r.no1||'—'}</td>
+      <td class="num">#${r.peak}</td></tr>`).join('')}</tbody></table>`;
+  hydrateThumbs();
 }
 
 /* Top 100 streams — bảng kèm cover art, 2 chế độ:
@@ -620,7 +797,19 @@ function renderAnalytics(){
    Cột "#" = hạng theo cột số đang sort (hoặc Streams/Total khi sort theo Song/Artist) — hạng gắn với bài,
    không đổi khi đảo chiều hay sort chữ. Ở All time, mỗi ô năm kèm hạng của bài trong năm đó (#n).
    Ô search lọc theo tên bài/nghệ sĩ TRÊN top 100 đã chọn — số hạng vẫn giữ nguyên. */
-let top100State={ mode:'season', sortKey:'season', sortDir:'desc', q:'', rankKey:'season' };
+let top100State={ mode:'season', sortKey:'season', sortDir:'desc', q:'', rankKey:'season', expanded:false };
+const TOP_COLLAPSED=10;
+window.toggleTop100=function(){ top100State.expanded=!top100State.expanded; renderTop100(); };
+// Sparkline hạng theo tuần của 1 bài trong năm y (SVG inline, #1 ở trên, ngoài chart = khoảng trống)
+function rankSpark(t, y){
+  const mw=maxWeekOf(y); if(!mw) return '';
+  const W=96, H=24, wm=t.years.get(y)||new Map();
+  const X=w=>mw>1?((w-1)/(mw-1))*W:W/2, Y=r=>2+((r-1)/(CHART_SIZE-1))*(H-4);
+  let d='', pen=false, best=null;
+  for(let w=1; w<=mw; w++){ const r=onChartRank(wm.get(w)); if(r==null){ pen=false; continue; }
+    d+=(pen?'L':'M')+X(w).toFixed(1)+' '+Y(r).toFixed(1); pen=true; if(!best||r<best.r) best={w,r}; }
+  return `<svg class="spark" viewBox="-2 0 ${W+4} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${d}"/>${best?`<circle cx="${X(best.w)}" cy="${Y(best.r)}" r="2.4"/>`:''}</svg>`;
+}
 function top100Columns(){
   const cols=[{key:'name', label:'Song', type:'str'}, {key:'artist', label:'Artist', type:'str'}];
   if(top100State.mode==='all'){
@@ -648,7 +837,7 @@ function top100Ranks(list, key, y){
 }
 window.setTop100Mode=function(mode){
   if(top100State.mode===mode) return;
-  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc', q:top100State.q, rankKey:null };
+  top100State={ mode, sortKey: mode==='season'?'season':'total', sortDir:'desc', q:top100State.q, rankKey:null, expanded:top100State.expanded };
   renderTop100();
 };
 window.setTop100Sort=function(key){
@@ -691,14 +880,18 @@ function renderTop100(){
   const valFn = st.sortKey==='rank' ? (t=>ranks.get(t.id)) : (t=>top100Value(t,st.sortKey,y));
   const isStr = sortCol && sortCol.type==='str';
   const cmpAsc=(a,b)=> (isStr ? String(valFn(a)).localeCompare(String(valFn(b))) : valFn(a)-valFn(b)) || ranks.get(a.id)-ranks.get(b.id);
-  const sorted=[...shown].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
+  const sortedAll=[...shown].sort((a,b)=> st.sortDir==='asc' ? cmpAsc(a,b) : -cmpAsc(a,b));
+  // mặc định chỉ hiện Top 10; đang lọc theo tên thì hiện hết kết quả
+  const sorted = (st.expanded || q) ? sortedAll : sortedAll.slice(0, TOP_COLLAPSED);
+  const spark = st.mode==='season';
+  const barMax = Math.max(1, ...roster.map(t=>top100Value(t,primaryKey,y)));
 
   const arrow=k=>`<i class="sar">${st.sortKey===k?(st.sortDir==='desc'?'▼':'▲'):''}</i>`;
   $('top100Thead').innerHTML = `<tr>
     <th class="sortable${st.sortKey==='rank'?' on':''}" style="text-align:center;width:52px" title="Rank by ${esc(rankCol.label)}" onclick="setTop100Sort('rank')">#${arrow('rank')}</th>
     <th style="width:52px"></th>${cols.map(c=>
     `<th class="sortable${st.sortKey===c.key?' on':''}"${c.type==='num'?' style="text-align:right"':''} onclick="setTop100Sort('${c.key}')">${esc(c.label)}${arrow(c.key)}</th>`
-  ).join('')}</tr>`;
+  ).join('')}${spark?'<th style="text-align:center">Run</th>':''}</tr>`;
 
   $('top100Table').innerHTML = sorted.length ? sorted.map(t=>{ const r=ranks.get(t.id); return `<tr>
     <td class="rank r${r<=3?r:''}">${r}</td>
@@ -708,12 +901,18 @@ function renderTop100(){
       if(c.key==='artist') return `<td class="clickable" onclick="openTrack('${t.id}')"><div class="t-artist">${esc(t.artist)}</div></td>`;
       const v=top100Value(t,c.key,y);
       const cr=colRanks[c.key]?.get(t.id);
-      return `<td class="num">${v?fmt(v):'—'}${cr?`<span class="t100-rk${cr<=3?' top':''}">#${cr}</span>`:''}</td>`;
-    }).join('')}
+      const bar = c.key===primaryKey && v ? ` style="--bar:${(v/barMax*100).toFixed(1)}%"` : '';
+      return `<td class="num${bar?' barcell':''}"${bar}>${v?fmt(v):'—'}${cr?`<span class="t100-rk${cr<=3?' top':''}">#${cr}</span>`:''}</td>`;
+    }).join('')}${spark?`<td class="sparkcell">${rankSpark(t,y)}</td>`:''}
   </tr>`; }).join('')
-    : `<tr><td colspan="${cols.length+2}"><div class="empty">No song or artist matches “${esc(st.q.trim())}”.</div></td></tr>`;
+    : `<tr><td colspan="${cols.length+3}"><div class="empty">No song or artist matches “${esc(st.q.trim())}”.</div></td></tr>`;
   hydrateThumbs();
 
+  // gọn (Top 10) thì bỏ giới hạn chiều cao khung cuộn để không cắt mất hàng cuối
+  $('top100Table').closest('.table-scroll')?.classList.toggle('open', !(st.expanded||q));
+  const more=$('top100More');
+  if(more) more.innerHTML = (!q && sortedAll.length>TOP_COLLAPSED)
+    ? `<button type="button" class="btn ghost small" onclick="toggleTop100()">${st.expanded?'Show top '+TOP_COLLAPSED:'Show all '+sortedAll.length}</button>` : '';
   const cnt = q ? `${sorted.length} of top ${roster.length}` : `Top ${roster.length}`;
   $('top100Hint').textContent = st.mode==='season'
     ? `${cnt} song${roster.length===1?'':'s'} by streams in ${y}. # = rank by streams this season. Click a column to sort — click again to flip direction.`
@@ -776,7 +975,7 @@ function renderRaceMeta(y){
   const statsEl=$('champStats');
   if(statsEl){
     statsEl.innerHTML = total ? `<table class="champ-table">
-      <thead><tr><th>Song &amp; Artist</th><th>Wks #1</th><th>Peak streams</th><th>Peak wk</th></tr></thead>
+      <thead><tr><th>Song</th><th title="Weeks at #1">#1 wks</th><th title="Peak weekly streams">Peak</th><th title="Week of peak streams">Week</th></tr></thead>
       <tbody>${pageItems.map(c=>{ const on=raceState.selected.has(c.id); return `<tr class="${on?'on':''} clickable" onclick="raceToggle('${c.id}')">
         <td><div class="champ-song"><span class="cs-dot" style="background:${on?colorOf[c.id]:'transparent'}"></span>${thumbHTML(c.t)}<div><div class="cs-name">${esc(c.t.name)}</div><div class="cs-art">${esc(c.t.artist)}</div></div></div></td>
         <td class="num">${c.weeksAt1}</td>
@@ -809,24 +1008,26 @@ function renderRaceChart(y){
   const sorted=sortChamps(champs, raceState.sort);
   const upTo=raceState.upTo||maxWeekOf(y)||1;
   const labels=[]; for(let w=1;w<=upTo;w++) labels.push('W'+w);
-  const series=c=>labels.map((_,ix)=>{ const e=entryAt(c.t,y,ix+1); return (e&&e.rank!=null)?e.rank:null; });
+  // hạng ngoài top CHART_SIZE -> null: đường ngắt thay vì cắm xuống đáy
+  const series=c=>labels.map((_,ix)=>onChartRank(entryAt(c.t,y,ix+1)));
   const t=TH();
   const ds=[];
   // line nền (không chọn) — mờ, chỉ làm ngữ cảnh
   sorted.filter(c=>!raceState.selected.has(c.id)).forEach(c=>ds.push({
-    label:c.t.name, data:series(c), borderColor:t.grid, backgroundColor:'transparent',
-    borderWidth:1, pointRadius:0, tension:.35, spanGaps:false, order:2 }));
+    label:c.t.name, _bg:true, data:series(c), borderColor:t.grid, backgroundColor:'transparent',
+    borderWidth:1, pointRadius:0, pointHoverRadius:0, tension:0, spanGaps:false, order:2 }));
   // line champion đang chọn — tô màu, dày, có nhãn
   sorted.filter(c=>raceState.selected.has(c.id)).forEach(c=>ds.push({
     label:c.t.name, _champ:true, data:series(c),
     borderColor:raceState.colorOf[c.id]||t.red, backgroundColor:raceState.colorOf[c.id]||t.red,
-    borderWidth:2.5, pointRadius:0, pointHoverRadius:5, tension:.35, spanGaps:false, order:1 }));
-  const ranks=sorted.flatMap(c=>{ const wm=c.t.years.get(y)||new Map(); return [...wm.entries()].filter(([w,e])=>w<=upTo&&e.rank!=null).map(([,e])=>e.rank); });
-  const rankMax=Math.max(10, ...ranks);
+    borderWidth:2.5, pointRadius:0, pointHoverRadius:5, tension:0, spanGaps:false, order:1 }));
+  const ranks=ds.flatMap(d=>d.data).filter(r=>r!=null);
+  const rankMax=Math.min(CHART_SIZE, Math.max(10, ...ranks));
   drawChart('chartBump','line',{ labels, datasets:ds },
-    { layout:{ padding:{ right:96 } },
+    { layout:{ padding:{ right:110 } },
       interaction:{ mode:'nearest', intersect:false },
-      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
+      onHover:focusLineOnHover,
+      plugins:{ legend:{ display:false }, tooltip:{ filter:i=>!i.dataset._bg, callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
       scales:{ y:{ reverse:true, min:1, max:rankMax, grid:{color:t.grid}, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
                x:{ grid:{display:false}, ticks:{ maxTicksLimit:14 } } } },
     [raceLabelPlugin]);
@@ -847,7 +1048,7 @@ function onChartSeries(t){
   for(const [y,wm] of t.years) for(const [w,e] of wm){ if(e.rank!=null){ const gw=gwOf(y,w); if(first==null||gw<first) first=gw; if(last==null||gw>last) last=gw; } }
   if(first==null) return [];
   const arr=[];
-  for(let gw=first; gw<=last; gw++){ const e=entryAtGw(t,gw); arr.push(e&&e.rank!=null?e.rank:null); }
+  for(let gw=first; gw<=last; gw++) arr.push(onChartRank(entryAtGw(t,gw)));
   return arr;
 }
 function renderDebutRace(){
@@ -866,7 +1067,7 @@ function renderDebutRace(){
 function renderDebutChips(){
   const el=$('debutChips'); if(!el) return;
   const list=[...debutState.selected].map(id=>model.tracks.get(id)).filter(Boolean);
-  el.innerHTML = list.length ? list.map((t,i)=>`<span class="chip on" onclick="debutRemove('${t.id}')" style="border-color:${RACE_COLORS[i%RACE_COLORS.length]}"><span class="ck">✕</span>${thumbHTML(t)}<span>${esc(t.name)}</span></span>`).join('')
+  el.innerHTML = list.length ? list.map((t,i)=>`<span class="chip" onclick="debutRemove('${t.id}')" title="Remove"><span class="cs-dot" style="background:${RACE_COLORS[i%RACE_COLORS.length]}"></span>${thumbHTML(t)}<span>${esc(t.name)}</span><span class="ck">✕</span></span>`).join('')
     : '<span class="hint">No songs selected — search above to add one.</span>';
   hydrateThumbs();
 }
@@ -878,15 +1079,16 @@ function renderDebutChart(){
   const ds=list.map((t,i)=>({
     label:t.name, data:labels.map((_,ix)=>series[i][ix]??null),
     borderColor:RACE_COLORS[i%RACE_COLORS.length], backgroundColor:RACE_COLORS[i%RACE_COLORS.length],
-    borderDash:RACE_DASHES[i%RACE_DASHES.length], borderWidth:2.5, tension:.3, pointRadius:2, pointHoverRadius:5, spanGaps:false
+    borderDash:RACE_DASHES[i%RACE_DASHES.length], borderWidth:2.5, tension:0, pointRadius:0, pointHoverRadius:5, spanGaps:false
   }));
   const ranks=series.flat().filter(r=>r!=null);
-  const rankMax=Math.max(10, ...ranks, 1);
+  const rankMax=Math.min(CHART_SIZE, Math.max(10, ...ranks, 1));
   const t=TH();
   drawChart('chartDebut','line',{ labels, datasets:ds },
-    { plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'"Inter", system-ui, sans-serif', size:11}} }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
+    { interaction:{ mode:'nearest', intersect:false }, onHover:focusLineOnHover,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:c=>c.dataset.label+' · #'+c.parsed.y } } },
       scales:{ y:{ reverse:true, min:1, max:rankMax, grid:{color:t.grid}, ticks:{ ...(rankMax<=15?{stepSize:1}:{}), callback:v=>'#'+v } },
-               x:{ grid:{display:false}, title:{ display:true, text:'WEEKS SINCE ON-CHART', color:t.mid, font:{family:'"Inter", system-ui, sans-serif', size:9} }, ticks:{ maxTicksLimit:14 } } } });
+               x:{ grid:{display:false}, title:{ display:true, text:'Weeks since debut', color:t.mid }, ticks:{ maxTicksLimit:14 } } } });
 }
 window.debutRemove=function(id){ debutState.selected.delete(id); renderDebutChips(); renderDebutChart(); };
 function addDebutSong(){
@@ -916,7 +1118,8 @@ function renderPrediction(y){
   proj.forEach((x,i)=>x.rank=i+1);
   const risks=proj.filter(x=>x.g<=-0.25 && x.cur<=25).slice(0,3);
   const contend=proj[0]&&proj[0].cur!==1?proj[0]:null;
-  let html='<div class="bt" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.08em;margin-bottom:10px">PROJECTION FOR WEEK '+(w+1)+'/'+y+'</div>';
+  $('predSub').textContent='Projection for W'+(w+1);
+  let html='';
   html+='<table><tbody>'+proj.slice(0,10).map(x=>{
     const d=x.cur-x.rank;
     const mv=d===0?'<span class="mv eq">=</span>':(d>0?'<span class="mv up">+'+d+'</span>':'<span class="mv down">-'+(-d)+'</span>');
@@ -944,6 +1147,7 @@ function runCompare(){
     if(va!=null&&vb!=null&&va!==vb){ const aw=lowerWins?va<vb:va>vb; wa=aw?' win':''; wb=aw?'':' win'; }
     return `<div class="c-a${wa}">${fa??'—'}</div><div class="c-lbl">${lbl}</div><div class="c-b${wb}">${fb??'—'}</div>`;
   };
+  $('cmpOut').dataset.filled='1';
   $('cmpOut').innerHTML=`
     <div style="display:flex;justify-content:space-between;gap:10px;font-weight:700;font-size:14px">
       <div style="display:flex;gap:8px;align-items:center">${thumbHTML(a)}<div>${esc(a.name)}<div class="t-artist">${esc(a.artist)}</div></div></div>
@@ -960,9 +1164,9 @@ function runCompare(){
     <div class="chartbox" style="height:260px"><canvas id="chartCmp"></canvas></div>`;
   const mw=maxWeekOf(y);
   const labels=[]; for(let w=1;w<=mw;w++) labels.push('W'+w);
-  const mk=(t,color)=>({ label:t.name, data:labels.map((_,ix)=>{const e=entryAt(t,y,ix+1); return e&&e.rank!=null?e.rank:null;}),
-    borderColor:color, backgroundColor:color, tension:.25, pointRadius:2, spanGaps:false });
-  const maxR=Math.max(20, ...[a,b].flatMap(t=>{const wm=t.years.get(y)||new Map(); return [...wm.values()].filter(e=>e.rank!=null).map(e=>e.rank);}));
+  const mk=(t,color)=>({ label:t.name, data:labels.map((_,ix)=>onChartRank(entryAt(t,y,ix+1))),
+    borderColor:color, backgroundColor:color, borderWidth:2.5, tension:0, pointRadius:0, pointHoverRadius:5, spanGaps:false });
+  const maxR=Math.min(CHART_SIZE, Math.max(20, ...[a,b].flatMap(t=>{const wm=t.years.get(y)||new Map(); return [...wm.values()].map(onChartRank).filter(r=>r!=null);})));
   const tc=TH();
   drawChart('chartCmp','line',{ labels, datasets:[mk(a,tc.red), mk(b,PALETTE[1])] },
     { plugins:{ legend:{position:'bottom', labels:{font:{family:'"Inter", system-ui, sans-serif', size:11}}}, tooltip:{callbacks:{label:c=>c.dataset.label+' · #'+c.parsed.y}} },
@@ -1614,6 +1818,7 @@ $('pngBtn').onclick=exportPNG;
 $('trackSearch').oninput=()=>renderTrackList();
 $('top100Search').oninput=e=>{ top100State.q=e.target.value; renderTop100(); };
 $('cmpBtn').onclick=runCompare;
+$('anTabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-pane]'); if(b) setAnPane(b.dataset.pane); });
 $('debutAddBtn').onclick=addDebutSong;
 $('debutAdd').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addDebutSong(); } });
 $('atSearch').oninput=()=>renderAllTime();

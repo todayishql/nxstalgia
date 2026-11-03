@@ -147,7 +147,7 @@ select.year{background:var(--paper3); border:1px solid var(--line); border-radiu
 .pod.p1 .tname{font-size:clamp(22px,2.8vw,30px)}
 .crown{position:absolute; top:16px; right:16px; font-size:11px; font-weight:700;
   background:var(--red); color:var(--on-red); border-radius:999px; padding:4px 10px; white-space:nowrap}
-.eq{display:inline-flex; gap:2px; align-items:flex-end; height:12px}
+.eq:not(.mv){display:inline-flex; gap:2px; align-items:flex-end; height:12px}
 .eq i{width:3px; background:var(--red); border-radius:2px; animation:eqa .9s ease-in-out infinite; transform-origin:bottom}
 .eq i:nth-child(1){height:60%} .eq i:nth-child(2){height:100%; animation-delay:.15s}
 .eq i:nth-child(3){height:45%; animation-delay:.3s} .eq i:nth-child(4){height:85%; animation-delay:.45s}
@@ -178,9 +178,13 @@ select.year{background:var(--paper3); border:1px solid var(--line); border-radiu
 .race-slider input[type=range]{flex:1; accent-color:var(--red); height:22px}
 .race-slider .mono{font-size:12px; font-weight:700; background:var(--red-soft);
   color:var(--red); border-radius:999px; padding:4px 10px; white-space:nowrap}
-.race-stats{background:var(--paper);border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 14px 6px}
+.race-stats{background:var(--paper);border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px 14px 6px; min-width:0; overflow:hidden}
 .race-stats h3{font-size:12px; font-weight:700; color:var(--muted); margin-bottom:10px}
-.champ-table{width:100%; border-collapse:collapse; font-size:13px}
+.champ-table{width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed}
+.champ-table th:nth-child(2),.champ-table th:nth-child(4){width:52px}
+.champ-table th:nth-child(3){width:62px}
+.champ-table .thumb{width:30px; height:30px; border-radius:5px; font-size:12px}
+.champ-song>div{min-width:0}
 .champ-table th{font-size:11px; font-weight:600; color:var(--faint); text-align:right; padding:8px 6px;
   border-bottom:1px solid var(--line); text-transform:none; letter-spacing:0}
 .champ-table th:first-child{text-align:left}
@@ -293,11 +297,21 @@ input:focus,select:focus,textarea:focus{outline:none; border-color:var(--red);
 .badge-user{font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
   color:var(--red); background:var(--red-soft); border-radius:6px; padding:2px 6px; margin-left:7px;
   vertical-align:1px; white-space:nowrap}
-.records{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px}
-.record{background:var(--paper); border:1px solid var(--rule-soft); border-radius:var(--radius-sm); padding:14px 16px}
-.record .rl{font-size:12px; font-weight:600; color:var(--faint)}
-.record .rv{margin-top:6px; font-weight:700; font-size:15px; letter-spacing:-.01em; line-height:1.3}
-.record .rd{margin-top:4px; font-size:14px; font-weight:700; color:var(--red); font-variant-numeric:tabular-nums}
+.records{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:24px}
+.record{background:var(--paper3); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px 16px;
+  box-shadow:var(--shade); display:flex; flex-direction:column; min-width:0; transition:box-shadow .2s ease, transform .2s ease}
+.record.clickable:hover{box-shadow:var(--shade-lg); transform:translateY(-2px)}
+.record .rl{font-size:12px; font-weight:600; color:var(--muted)}
+.record .rbig{margin-top:6px; font-family:var(--display); font-weight:800; font-size:30px; line-height:1.1;
+  letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+.record .ru{font-family:var(--body); font-size:13px; font-weight:600; color:var(--faint); margin-left:5px; letter-spacing:0}
+.record .rwho{display:flex; align-items:center; gap:10px; margin-top:auto; padding-top:14px; min-width:0}
+.record .rwho .thumb{width:34px; height:34px; border-radius:6px; font-size:13px}
+.record .rwho-t{min-width:0}
+.record .rv{font-weight:600; font-size:13px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.record .rsub{font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+@media(max-width:1000px){ .records{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media(max-width:640px){ .records{grid-template-columns:repeat(2,minmax(0,1fr))} }
 .entry-row{display:grid; grid-template-columns:1fr 90px 110px 38px; gap:8px; margin-bottom:8px}
 @media(max-width:640px){ .entry-row{grid-template-columns:1fr 70px 90px 34px} }
 
@@ -461,3 +475,86 @@ details.help summary{cursor:pointer; color:var(--red); font-weight:600}
   .hero-inner{padding-top:16px; padding-bottom:14px}
   .panel{padding:16px}
 }
+
+/* ── Analytics: tab con, tiêu đề mục ───────────────────── */
+.subtabs{position:sticky; top:57px; z-index:30; display:flex; gap:4px; overflow-x:auto; margin:0 -4px 20px; padding:8px 4px;
+  background:color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px)}
+.subtabs button{flex:none; border:1px solid var(--line); background:var(--paper3); color:var(--muted); border-radius:999px;
+  padding:7px 16px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s ease}
+.subtabs button:hover{color:var(--ink); border-color:var(--rule)}
+.subtabs button.on{background:var(--red); border-color:var(--red); color:var(--on-red)}
+.anpane{display:none}
+.anpane.on{display:block; animation:fadein .2s ease}
+.sec-head h2{font-family:var(--display); font-weight:700; font-size:17px; letter-spacing:-.015em; margin:0 0 12px;
+  display:flex; align-items:baseline; gap:8px}
+.accent{color:var(--red)}
+.h-sub{font-family:var(--body); font-size:12px; font-weight:600; color:var(--faint); letter-spacing:0}
+.gstat .gval b{color:var(--ink); font-weight:700}
+#peakBars .gstat{grid-template-columns:120px 1fr 72px}
+
+/* Top streams: thanh trong ô + sparkline */
+td.barcell{background:linear-gradient(90deg, var(--band-st) var(--bar), transparent var(--bar)) no-repeat;
+  background-size:100% 100%}
+.table-scroll.open{max-height:none}
+td.sparkcell{width:110px; text-align:center; padding-top:4px; padding-bottom:4px}
+.spark{display:block; margin:0 auto; overflow:visible}
+.spark path{fill:none; stroke:var(--red); stroke-width:1.6; stroke-linejoin:round; stroke-linecap:round}
+.spark circle{fill:var(--red)}
+.t100-more{display:flex; justify-content:center; margin-top:12px}
+.t100-more:empty{display:none}
+
+/* Chart runs heatmap */
+.runs{overflow-x:auto; padding-bottom:4px}
+.run-row{display:grid; grid-template-columns:240px minmax(0,1fr) 44px 48px; align-items:center; gap:12px; padding:5px 4px;
+  border-bottom:1px solid var(--rule-soft); min-width:calc(360px + var(--n) * 12px)}
+.run-row:last-child{border-bottom:0}
+.run-row.clickable:hover{background:var(--hover)}
+.run-name{display:flex; align-items:center; gap:9px; min-width:0; width:240px; position:sticky; left:0;
+  background:var(--paper3); padding-right:6px}
+.run-row.clickable:hover .run-name{background:color-mix(in srgb, var(--paper3) 94%, var(--red))}
+.run-name>div{min-width:0}
+.run-name .t-name,.run-name .t-artist{white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.run-name .t-name{font-size:13px}
+.run-name .thumb{width:30px; height:30px; border-radius:5px; font-size:12px}
+.run-i{width:18px; flex:none; text-align:right; font-size:11px; font-weight:700; color:var(--faint)}
+.run-cells{display:grid; grid-template-columns:repeat(var(--n), minmax(10px,1fr)); gap:2px}
+.run-cells i{display:block; height:18px; border-radius:2px; box-shadow:inset 0 0 0 1px var(--rule-soft)}
+.run-head .run-cells span{font-size:9.5px; color:var(--faint); text-align:left; white-space:nowrap; overflow:visible}
+.run-head{border-bottom:1px solid var(--line); padding-top:0}
+.run-head .run-name{background:transparent}
+.run-stat{text-align:right; font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.run-stat b{color:var(--ink); font-weight:700}
+.run-stat.no1 b{color:var(--red)}
+.run-head .run-stat{font-size:11px; font-weight:600; color:var(--faint)}
+.rq{display:inline-block; width:12px; height:12px; border-radius:2px; box-shadow:inset 0 0 0 1px var(--rule); vertical-align:-2px}
+.q1,.q2,.q3,.q4{box-shadow:none!important}
+.q1{background:var(--red)!important}
+.q2{background:color-mix(in srgb, var(--red) 70%, var(--paper3))!important}
+.q3{background:color-mix(in srgb, var(--red) 45%, var(--paper3))!important}
+.q4{background:color-mix(in srgb, var(--red) 25%, var(--paper3))!important}
+.q5{background:color-mix(in srgb, var(--red) 13%, var(--paper3))!important; box-shadow:none!important}
+.runs-foot{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:14px}
+.runs-legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted)}
+.runs-legend span{display:inline-flex; align-items:center; gap:6px}
+@media(max-width:640px){ .run-row{grid-template-columns:170px auto 40px 44px} .run-name{width:170px} }
+
+/* Scatter legend + head-to-head trống */
+.scatter-legend{display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--muted)}
+.scatter-legend span{display:inline-flex; align-items:center; gap:6px}
+.scatter-legend i{width:10px; height:10px; border-radius:999px; display:inline-block}
+.cmp-empty{border:1px dashed var(--rule); border-radius:var(--radius-sm); padding:18px 16px; text-align:center;
+  font-size:13px; color:var(--muted)}
+.cmp-empty .chip{font-weight:500}
+.cmp-empty .chip .ck{font-weight:700; color:var(--red)}
+
+/* Artist board */
+.aboard td{padding-top:8px; padding-bottom:8px}
+.aboard .thumb{width:34px; height:34px; border-radius:999px}
+.ab-bar-h{text-align:right}
+#artistBoard{overflow-x:auto}
+td.ab-bar{min-width:220px}
+.ab-in{display:flex; align-items:center; gap:12px}
+td.ab-bar .gbar{flex:1; height:8px; background:var(--paper2); border-radius:999px; overflow:hidden}
+td.ab-bar .gbar>i{display:block; height:100%; background:var(--red); border-radius:999px}
+td.ab-bar .num{width:84px; text-align:right; font-size:13px; color:var(--ink2); font-variant-numeric:tabular-nums}
+@media(max-width:700px){ .aboard th:nth-child(5),.aboard td:nth-child(5),.aboard th:nth-child(6),.aboard td:nth-child(6){display:none} td.ab-bar{min-width:140px} }
