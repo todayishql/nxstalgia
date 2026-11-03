@@ -61,6 +61,21 @@
 
   <!-- ══ TỔNG QUAN ══ -->
   <section class="view" id="view-overview">
+    <!-- Chart beat: slide tin nổi bật của tuần (kiểu Spotify Charts) -->
+    <div class="beat-hero" id="beatHero" aria-roledescription="carousel" aria-label="Chart beat">
+      <div class="bh-top">
+        <span class="bh-brand">Chart beat</span>
+        <button type="button" class="bh-copy" id="copyBeatBtn">Copy bulletin</button>
+      </div>
+      <div class="bh-slides" id="beatSlides"></div>
+      <div class="bh-foot">
+        <div class="bh-dots" id="beatDots" role="tablist"></div>
+        <div class="bh-nav">
+          <button type="button" id="beatPrev" aria-label="Previous">‹</button>
+          <button type="button" id="beatNext" aria-label="Next">›</button>
+        </div>
+      </div>
+    </div>
     <div class="kpis" id="kpis"></div>
     <div class="podium" id="podium"></div>
     <div class="grid2">
@@ -73,13 +88,6 @@
         <div class="chartbox"><canvas id="chartNo1"></canvas></div>
         <div class="hint">Hover to see which song held No.1 each week.</div>
       </div>
-    </div>
-    <div class="panel beat">
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
-        <h2 style="margin:0">Chart beat</h2>
-        <button class="btn ghost small" id="copyBeatBtn">Copy bulletin</button>
-      </div>
-      <div id="beatBody" style="margin-top:16px"></div>
     </div>
   </section>
 

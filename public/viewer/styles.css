@@ -367,15 +367,6 @@ input:focus,select:focus,textarea:focus{outline:none; border-color:var(--red);
 details.help{margin-top:14px; color:var(--ink2); font-size:13px}
 details.help summary{cursor:pointer; color:var(--red); font-weight:600}
 
-/* ── Chart Beat ────────────────────────────────────────── */
-.beat{background:linear-gradient(180deg,var(--red-soft),var(--paper3) 120px)}
-.beat .bt{font-size:12px; font-weight:600; color:var(--faint); margin-bottom:8px}
-.beat p{display:flex; gap:12px; align-items:flex-start; font-size:14px; line-height:1.6; color:var(--ink2);
-  padding:9px 0; border-bottom:1px solid var(--rule-soft); text-wrap:pretty}
-.beat p:last-child{border-bottom:0; padding-bottom:0}
-.beat p:first-of-type{font-size:15px; font-weight:600; color:var(--ink)}
-.beat .bic{flex:0 0 22px; font-size:15px; line-height:1.5}
-
 /* ── Sheet bảng xếp hạng (xuất ảnh) — phong cách talkofthecharts ── */
 .sheet-scroll{overflow-x:auto; border-radius:var(--radius); box-shadow:var(--shade)}
 .sheet{background:var(--sheet); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden;
@@ -658,4 +649,46 @@ td.no1c{color:var(--red); font-weight:700}
   .sd-hero{flex-direction:column; align-items:flex-start}
   .thumb.hero{width:96px; height:96px}
   .mini-list{grid-template-columns:1fr}
+}
+
+/* ── Chart beat: slide đầu Overview (kiểu Spotify Charts) ── */
+.beat-hero{--bh-bg:#5A1E1E; position:relative; background:var(--bh-bg); color:#fff; border-radius:var(--radius);
+  padding:26px 36px 22px; margin-bottom:24px; overflow:hidden; box-shadow:var(--shade-lg);
+  transition:background-color .7s ease}
+.beat-hero::before{content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(120% 140% at 100% 0%, rgba(255,255,255,.10), transparent 55%)}
+.bh-top{position:relative; display:flex; justify-content:space-between; align-items:center; gap:12px}
+.bh-brand{font-family:var(--display); font-weight:800; font-size:17px; letter-spacing:-.01em; display:inline-flex; align-items:center; gap:8px}
+.bh-brand::before{content:""; width:10px; height:10px; border-radius:999px; background:#fff; box-shadow:0 0 0 4px rgba(255,255,255,.2)}
+.bh-copy{height:34px; padding:0 14px; border-radius:8px; border:1px solid rgba(255,255,255,.55); background:transparent; color:#fff;
+  font-size:13px; font-weight:600; cursor:pointer; transition:background .15s ease}
+.bh-copy:hover{background:rgba(255,255,255,.12)}
+.bh-slides{position:relative; display:grid; margin-top:22px}
+.bh-slide{grid-area:1/1; display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:40px; align-items:center;
+  opacity:0; visibility:hidden; transform:translateX(16px); transition:opacity .5s ease, transform .5s ease, visibility .5s}
+.bh-slide.on{opacity:1; visibility:visible; transform:none}
+.bh-kicker{font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.7)}
+.bh-head{font-family:var(--display); font-weight:800; font-size:clamp(24px,3.4vw,44px); line-height:1.08; letter-spacing:-.035em;
+  margin:10px 0 16px; text-wrap:balance}
+.bh-head a{color:#fff; cursor:pointer}
+.bh-head a:hover{text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:4px}
+.bh-sub{font-size:14px; color:rgba(255,255,255,.85)}
+.bh-art{width:240px; height:240px; border-radius:6px; background:rgba(255,255,255,.12) center/cover; cursor:pointer;
+  box-shadow:0 20px 40px -14px rgba(0,0,0,.6); display:grid; place-items:center; font-size:60px; color:rgba(255,255,255,.5)}
+.bh-foot{position:relative; display:flex; justify-content:space-between; align-items:center; margin-top:22px}
+.bh-dots{display:flex; gap:8px}
+.bh-dots button{width:7px; height:7px; padding:0; border:0; border-radius:999px; background:rgba(255,255,255,.4); cursor:pointer;
+  transition:width .3s ease, background .3s ease}
+.bh-dots button.on{width:22px; background:#fff}
+.bh-nav{display:flex; gap:6px}
+.bh-nav button{width:32px; height:32px; border-radius:999px; border:1px solid rgba(255,255,255,.4); background:transparent; color:#fff;
+  font-size:18px; line-height:1; cursor:pointer}
+.bh-nav button:hover{background:rgba(255,255,255,.14)}
+.beat-hero :focus-visible{outline-color:#fff}
+@media(max-width:760px){
+  .beat-hero{padding:20px 20px 18px}
+  .bh-slide{grid-template-columns:minmax(0,1fr) 96px; gap:16px; align-items:start}
+  .bh-art{width:96px; height:96px; font-size:28px}
+  .bh-head{font-size:clamp(20px,6vw,28px)}
+  .bh-copy{height:30px; font-size:12px}
 }
