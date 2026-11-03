@@ -243,18 +243,105 @@ function generateBeat(y,w){
   if(ms.length) L.push('🎖️ Milestones: '+ms.slice(0,4).join('; ')+'.');
   return { title:`CHART BEAT — Week ${w}/${y} (${weekDates(y,w)})`, lines:L };
 }
+/* ── Chart beat dạng slide (đầu Overview, kiểu Spotify Charts) ──
+   Mỗi slide = 1 tin nổi bật của tuần mới nhất, nền lấy màu chủ đạo từ ảnh bìa. */
+const ordinal = n => n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th');
+const quoteSong = t => `“${esc(t.name)}” by ${esc(t.artist)}`;
+// số tuần liên tiếp trên chart tính tới tuần (y,w)
+function runLength(t, y, w){ let n=0, gw=gwOf(y,w); while(onChartRank(entryAtGw(t,gw))!=null){ n++; gw--; } return n; }
+function beatSlides(y, w){
+  const rows=weekChart(y,w); if(!rows.length) return [];
+  const S=[], used=new Set();
+  const add=(t, html, kicker)=>{ S.push({ t, html, kicker }); used.add(t.id); };
+  const sn = n => n>=1e7 ? abbr(n) : fmt(n);   // 122,020,393 -> 122M cho tiêu đề
+  // 1. No.1
+  const n1=rows[0], mv1=movement(n1.t,y,w), run=runLength1(n1.t,y,w);
+  const prev1=entryAtGw(n1.t, gwOf(y,w)-1);
+  const pct=(prev1&&prev1.stream)?Math.round((n1.stream-prev1.stream)/prev1.stream*100):null;
+  add(n1.t,
+    mv1&&mv1.cls==='new' ? `${quoteSong(n1.t)} debuts straight at No.1 with ${sn(n1.stream)} streams.`
+    : run>1 ? `${quoteSong(n1.t)} holds No.1 for a ${ordinal(run)} week${pct!=null?`, ${pct>=0?'up':'down'} ${Math.abs(pct)}% to ${sn(n1.stream)} streams`:''}.`
+    : `${quoteSong(n1.t)} rises to No.1 with ${sn(n1.stream)} streams.`, 'No.1 this week');
+  // 2. Bước nhảy lớn nhất
+  let bg=null;
+  for(const r of rows){ const p=onChartRank(entryAtGw(r.t, gwOf(y,w)-1)); if(p!=null && p-r.rank>(bg?.d||0)) bg={ r, d:p-r.rank, from:p }; }
+  if(bg && bg.d>=3 && !used.has(bg.r.t.id)) add(bg.r.t, `${quoteSong(bg.r.t)} makes the biggest jump of the week, up ${bg.d} spots from #${bg.from} to #${bg.r.rank}.`, 'Greatest gainer');
+  // 3. Debut cao nhất
+  const deb=rows.find(r=>movement(r.t,y,w)?.cls==='new' && !used.has(r.t.id));
+  if(deb){ const nDeb=rows.filter(r=>movement(r.t,y,w)?.cls==='new').length;
+    add(deb.t, `${quoteSong(deb.t)} is the highest debut of the week, entering at #${deb.rank}${nDeb>1?` — one of ${nDeb} new entries`:''}.`, 'Hot shot debut'); }
+  // 4. Ở lâu nhất trên chart (liên tiếp)
+  let lng=null; for(const r of rows){ const n=runLength(r.t,y,w); if(n>(lng?.n||0)) lng={ r, n }; }
+  if(lng && lng.n>=4 && !used.has(lng.r.t.id)) add(lng.r.t, `${quoteSong(lng.r.t)} has been on the chart the longest, at ${lng.n} weeks straight.`, 'Longest run');
+  // 5. Nghệ sĩ nhiều bài nhất trên chart tuần này
+  const byA=new Map(); for(const r of rows) for(const a of r.t.artists){ const k=artistKey(a); const e=byA.get(k)||{ a, n:0, best:r }; e.n++; byA.set(k,e); }
+  const topA=[...byA.values()].sort((a,b)=>b.n-a.n || a.best.rank-b.best.rank)[0];
+  if(topA && topA.n>=3) S.push({ t:topA.best.t, artist:topA.a, kicker:'Most songs on chart',
+    html:`${esc(topA.a)} has ${topA.n} songs on the chart this week, led by “${esc(topA.best.t.name)}” at #${topA.best.rank}.` });
+  // 6. Re-entry cao nhất, nếu không thì cú rơi mạnh nhất
+  const re=rows.find(r=>movement(r.t,y,w)?.cls==='re' && !used.has(r.t.id));
+  if(re) add(re.t, `${quoteSong(re.t)} returns to the chart at #${re.rank}.`, 'Re-entry');
+  else { let bd=null; for(const r of rows){ const p=onChartRank(entryAtGw(r.t, gwOf(y,w)-1)); if(p!=null && r.rank-p>(bd?.d||0)) bd={ r, d:r.rank-p, from:p }; }
+    if(bd && bd.d>=5 && !used.has(bd.r.t.id)) add(bd.r.t, `${quoteSong(bd.r.t)} takes the biggest fall, down ${bd.d} spots to #${bd.r.rank}.`, 'Biggest drop'); }
+  return S.slice(0,6);
+}
+function runLength1(t,y,w){ let n=0, gw=gwOf(y,w); while(entryAtGw(t,gw)?.rank===1){ n++; gw--; } return n; }
+
+// Màu nền từ ảnh bìa: trung bình có trọng số theo độ bão hoà -> tối lại để chữ trắng luôn đọc rõ
+const BEAT_FALLBACK=['#5A1E1E','#1E3A5F','#33204F','#14432F','#4A2E12','#3F1D3A','#1F3B45'];
+const beatColorCache=new Map();
+function hsl2hex(h,s,l){ const k=n=>(n+h*12)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1));
+  return '#'+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join(''); }
+function beatColor(t){
+  const fb=BEAT_FALLBACK[[...String(t.id)].reduce((a,c)=>a+c.charCodeAt(0),0)%BEAT_FALLBACK.length];
+  const url=artCache[t.id]; if(!url) return Promise.resolve(fb);
+  if(beatColorCache.has(url)) return beatColorCache.get(url);
+  const pr=new Promise(res=>{
+    const img=new Image(); img.crossOrigin='anonymous';
+    img.onload=()=>{ try{
+      const c=document.createElement('canvas'); c.width=c.height=24; const x=c.getContext('2d'); x.drawImage(img,0,0,24,24);
+      const d=x.getImageData(0,0,24,24).data; let R=0,G=0,B=0,W=0;
+      for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2], mx=Math.max(r,g,b), mn=Math.min(r,g,b), wt=.15+(mx-mn)/255; R+=r*wt; G+=g*wt; B+=b*wt; W+=wt; }
+      let r=R/W/255, g=G/W/255, b=B/W/255; const mx=Math.max(r,g,b), mn=Math.min(r,g,b); let h=0, s=0; const l=(mx+mn)/2;
+      if(mx!==mn){ const dd=mx-mn; s=dd/(1-Math.abs(2*l-1)); h = mx===r?((g-b)/dd)%6 : mx===g?(b-r)/dd+2 : (r-g)/dd+4; h/=6; if(h<0) h+=1; }
+      res(hsl2hex(h, Math.min(.65, Math.max(.28, s)), .22));
+    }catch(e){ res(fb); } };
+    img.onerror=()=>res(fb);
+    img.src=url;
+  });
+  beatColorCache.set(url, pr); return pr;
+}
+// ảnh lớn hơn cho slide (iTunes trả 300x300 -> xin 600x600)
+const bigArt = u => u ? u.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '';
+
+let beatState={ i:0, n:0, timer:null, slides:[] };
+const BEAT_MS=7000;
 function renderBeat(){
-  const w=maxWeekOf(currentYear);
-  const beat=w?generateBeat(currentYear,w):null;
-  // mỗi dòng bắt đầu bằng 1 emoji -> tách thành cột icon riêng cho đúng nhịp bản Blue
-  const beatLine=l=>{
-    const sp=l.indexOf(' ');
-    const ic=sp>0?l.slice(0,sp):'·', tx=sp>0?l.slice(sp+1):l;
-    return `<p><span class="bic">${esc(ic)}</span><span>${esc(tx)}</span></p>`;
-  };
-  $('beatBody').innerHTML = beat
-    ? `<div class="bt">${esc(beat.title)}</div>`+beat.lines.map(beatLine).join('')
-    : '<div class="empty" style="padding:16px 0">No data yet for this year.</div>';
+  const y=currentYear, w=maxWeekOf(y);
+  const slides=w?beatSlides(y,w):[];
+  beatState={ ...beatState, i:0, n:slides.length, slides };
+  const hero=$('beatHero');
+  hero.style.display = slides.length ? '' : 'none';
+  const sub=`THE N[${yy(y)}]stalgia · Week ${w} · ${w?weekDates(y,w):''}`;
+  $('beatSlides').innerHTML = slides.map((s,i)=>{
+    const u=bigArt(artCache[s.t.id]);
+    const open = s.artist ? `openArtist('${jsStr(s.artist)}')` : `openTrack('${s.t.id}')`;
+    return `<div class="bh-slide${i===0?' on':''}" role="group" aria-roledescription="slide" aria-label="${i+1} of ${slides.length}" aria-hidden="${i!==0}">
+      <div class="bh-text">
+        <div class="bh-kicker">${esc(s.kicker)}</div>
+        <h2 class="bh-head"><a onclick="${open}">${s.html}</a></h2>
+        <div class="bh-sub">${esc(sub)}</div>
+      </div>
+      <div class="bh-art${u?'':' empty'}" onclick="${open}"${u?` style="background-image:url('${u}')"`:''}>${u?'':'♪'}</div>
+    </div>`;
+  }).join('');
+  $('beatDots').innerHTML = slides.map((_,i)=>`<button type="button" role="tab" aria-label="Slide ${i+1}" class="${i===0?'on':''}" onclick="beatGo(${i})"></button>`).join('');
+  slides.forEach((s,i)=>beatColor(s.t).then(c=>{ s.color=c; if(beatState.slides===slides && beatState.i===i) hero.style.setProperty('--bh-bg', c); }));
+  hero.style.setProperty('--bh-bg', BEAT_FALLBACK[0]);
+  beatGo(0);
+
+  // copy bản tin dạng chữ (giữ nguyên định dạng cũ)
+  const beat=w?generateBeat(y,w):null;
   $('copyBeatBtn').onclick=()=>{
     if(!beat) return;
     const txt=beat.title+'\n'+beat.lines.join('\n');
@@ -262,6 +349,30 @@ function renderBeat(){
       ()=>{ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Bulletin copied'); });
   };
 }
+window.beatGo=function(i){
+  const st=beatState; if(!st.n) return;
+  st.i=(i+st.n)%st.n;
+  document.querySelectorAll('#beatSlides .bh-slide').forEach((el,k)=>{ el.classList.toggle('on', k===st.i); el.setAttribute('aria-hidden', k!==st.i); });
+  document.querySelectorAll('#beatDots button').forEach((el,k)=>el.classList.toggle('on', k===st.i));
+  const c=st.slides[st.i]?.color; if(c) $('beatHero').style.setProperty('--bh-bg', c);
+  // tự chuyển slide; dừng khi rê chuột / focus, và tắt hẳn nếu người dùng giảm chuyển động
+  clearTimeout(st.timer);
+  const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!reduce && st.n>1 && !st.paused) st.timer=setTimeout(()=>beatGo(st.i+1), BEAT_MS);
+};
+(function bindBeat(){
+  const hero=$('beatHero'); if(!hero) return;
+  $('beatPrev').onclick=()=>beatGo(beatState.i-1);
+  $('beatNext').onclick=()=>beatGo(beatState.i+1);
+  const pause=v=>{ beatState.paused=v; if(v) clearTimeout(beatState.timer); else beatGo(beatState.i); };
+  hero.addEventListener('mouseenter', ()=>pause(true));
+  hero.addEventListener('mouseleave', ()=>pause(false));
+  hero.addEventListener('keydown', e=>{ if(e.key==='ArrowLeft') beatGo(beatState.i-1); if(e.key==='ArrowRight') beatGo(beatState.i+1); });
+  // vuốt trên điện thoại
+  let x0=null;
+  hero.addEventListener('touchstart', e=>{ x0=e.touches[0].clientX; }, {passive:true});
+  hero.addEventListener('touchend', e=>{ if(x0==null) return; const dx=e.changedTouches[0].clientX-x0; if(Math.abs(dx)>40) beatGo(beatState.i+(dx<0?1:-1)); x0=null; });
+})();
 
 /* ───────── render: overview ───────── */
 function renderOverview(){
@@ -715,7 +826,7 @@ function renderRuns(y, charted){
   $('runGrid').style.setProperty('--n', mw);
   $('runGrid').innerHTML = head + rows.map((r,i)=>{
     const wm=r.t.years.get(y)||new Map();
-    const cells=Array.from({length:mw},(_,k)=>{ const rk=onChartRank(wm.get(k+1)); return rk==null?'<i></i>':`<i class="${q(rk)}" title="W${k+1} · #${rk}"></i>`; }).join('');
+    const cells=Array.from({length:mw},(_,k)=>{ const rk=onChartRank(wm.get(k+1)); return rk==null?'<i></i>':`<i class="${quoteSong(rk)}" title="W${k+1} · #${rk}"></i>`; }).join('');
     return `<div class="run-row clickable" onclick="openTrack('${r.t.id}')">
       <div class="run-name"><span class="run-i">${i+1}</span>${thumbHTML(r.t)}<div><div class="t-name">${esc(r.t.name)}</div><div class="t-artist">${esc(r.t.artist)}</div></div></div>
       <div class="run-cells">${cells}</div>
